@@ -133,7 +133,11 @@ fn resolve_raw_mode(
         payload.zstd_sample_ratio,
         best.label(),
     );
-    Ok((best.to_mode(), Some(best.label()), Some(payload.kind.label())))
+    Ok((
+        best.to_mode(),
+        Some(best.label()),
+        Some(payload.kind.label()),
+    ))
 }
 
 /// Write the full bootstrap artifact next to the `.cavs`: the whole input

@@ -262,8 +262,8 @@ pub fn load_prev(path: &std::path::Path) -> Result<PrevVersion> {
     let mut magic = [0u8; 4];
     {
         use std::io::Read as _;
-        let mut f = std::fs::File::open(path)
-            .with_context(|| format!("cannot read {}", path.display()))?;
+        let mut f =
+            std::fs::File::open(path).with_context(|| format!("cannot read {}", path.display()))?;
         let _ = f.read(&mut magic);
     }
     if &magic == b"CAVS" {
@@ -272,8 +272,7 @@ pub fn load_prev(path: &std::path::Path) -> Result<PrevVersion> {
         let set: HashSet<ChunkHash> = reader.chunks().iter().map(|c| c.hash).collect();
         return Ok(PrevVersion::ChunkSet(set));
     }
-    let data =
-        std::fs::read(path).with_context(|| format!("cannot read {}", path.display()))?;
+    let data = std::fs::read(path).with_context(|| format!("cannot read {}", path.display()))?;
     Ok(PrevVersion::Raw(data))
 }
 
@@ -367,7 +366,12 @@ mod tests {
     #[test]
     fn identical_versions_have_full_reuse() {
         let v = pseudo_random(2 * 1024 * 1024, 5);
-        let e = estimate(&v, Some(&PrevVersion::Raw(v.clone())), ChunkProfile::FastCdc64K, 3);
+        let e = estimate(
+            &v,
+            Some(&PrevVersion::Raw(v.clone())),
+            ChunkProfile::FastCdc64K,
+            3,
+        );
         assert!(e.reuse_ratio > 0.999);
         assert!(e.update_egress_bytes < e.cold_egress_bytes / 10);
     }

@@ -569,6 +569,21 @@ mod tests {
     }
 
     #[test]
+    fn v1_session_response_still_parses() {
+        // A v1 server response has none of the dual-route fields: they must
+        // deserialize as None so old servers keep working with new clients.
+        let resp: SessionOpenResponse =
+            serde_json::from_str("{\"session_id\":\"s\",\"known_chunks\":3}").unwrap();
+        assert_eq!(resp.known_chunks, 3);
+        assert!(resp.delivery_mode.is_none());
+        assert!(resp.bootstrap_size.is_none());
+        assert!(resp.bootstrap_blake3.is_none());
+        // And a v2 response omits absent fields on the wire.
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(!json.contains("delivery_mode"));
+    }
+
+    #[test]
     fn rejects_garbage() {
         assert!(BatchResponse::decode(b"nope").is_err());
         assert!(BatchResponse::decode(b"CVSP\x01\x01").is_err());

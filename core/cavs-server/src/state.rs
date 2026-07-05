@@ -685,7 +685,10 @@ fn to_hex_slice(bytes: &[u8]) -> String {
 /// Look for `<asset>.cavs.bootstrap.zst` next to the served file and verify
 /// it against the packer's `bootstrap.size` / `bootstrap.blake3` metadata.
 /// A missing or tampered sidecar simply disables the bootstrap route.
-fn load_bootstrap_sidecar(cavs_path: &std::path::Path, meta: &[(String, String)]) -> Option<Bootstrap> {
+fn load_bootstrap_sidecar(
+    cavs_path: &std::path::Path,
+    meta: &[(String, String)],
+) -> Option<Bootstrap> {
     let get = |key: &str| meta.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
     let expected_size: u64 = get("bootstrap.size")?.parse().ok()?;
     let expected_blake3 = get("bootstrap.blake3")?.to_string();

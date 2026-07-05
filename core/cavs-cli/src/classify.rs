@@ -83,7 +83,8 @@ pub fn classify(path: &Path, data: &[u8]) -> PayloadProfile {
             | PayloadKind::ImageCompressed
             | PayloadKind::AudioCompressed
     );
-    let likely_precompressed = kind_precompressed || (entropy_score > 7.8 && zstd_sample_ratio > 0.99);
+    let likely_precompressed =
+        kind_precompressed || (entropy_score > 7.8 && zstd_sample_ratio > 0.99);
 
     // Engine packs and archives shift content between versions: FastCDC
     // keeps chunk boundaries stable under insertions/deletions.
@@ -167,8 +168,8 @@ fn detect_kind(path: &Path, data: &[u8]) -> PayloadKind {
         "mp4" | "m4s" | "webm" | "mkv" | "mov" => PayloadKind::VideoSegment,
         "png" | "jpg" | "jpeg" | "webp" | "ktx2" | "basis" => PayloadKind::ImageCompressed,
         "ogg" | "mp3" | "opus" | "aac" | "flac" => PayloadKind::AudioCompressed,
-        "json" | "txt" | "csv" | "xml" | "yaml" | "yml" | "toml" | "md" | "cfg" | "ini" | "tres"
-        | "tscn" | "import" => PayloadKind::MetadataText,
+        "json" | "txt" | "csv" | "xml" | "yaml" | "yml" | "toml" | "md" | "cfg" | "ini"
+        | "tres" | "tscn" | "import" => PayloadKind::MetadataText,
         "wav" | "bmp" | "tga" | "bin" | "dat" => PayloadKind::RawBinary,
         _ => PayloadKind::Unknown,
     }
@@ -271,7 +272,11 @@ mod tests {
             ("d.json", PayloadKind::MetadataText),
             ("e.wav", PayloadKind::RawBinary),
         ] {
-            assert_eq!(classify(&PathBuf::from(name), &payload).kind, kind, "{name}");
+            assert_eq!(
+                classify(&PathBuf::from(name), &payload).kind,
+                kind,
+                "{name}"
+            );
         }
     }
 
