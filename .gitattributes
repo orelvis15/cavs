@@ -1,0 +1,11 @@
+# Normalize line endings; let Git detect text vs binary automatically.
+* text=auto eol=lf
+
+# Explicit binaries (never munge).
+*.png binary
+*.jpg binary
+*.wav binary
+*.mp4 binary
+*.pck binary
+*.cavs binary
+*.wasm binary
