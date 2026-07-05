@@ -163,11 +163,34 @@ pub struct SessionOpenRequest {
     pub have_bloom: Option<BloomFilter>,
 }
 
+/// How the server suggests delivering this asset to this client (v2 dual
+/// route). Advisory: a client may always fall back to the chunk path.
+pub const DELIVERY_BOOTSTRAP: &str = "bootstrap";
+pub const DELIVERY_CHUNKS: &str = "chunks";
+pub const DELIVERY_REFERENCES: &str = "references";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionOpenResponse {
     pub session_id: String,
     /// How many of the client's `have` hashes matched this asset.
     pub known_chunks: usize,
+    /// Suggested delivery route: `bootstrap` (download the full compressed
+    /// artifact and seed the cache locally — cheaper for cold clients),
+    /// `chunks` (missing chunks via batches) or `references` (client already
+    /// has everything). Absent on v1 servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_mode: Option<String>,
+    /// Size in bytes of the bootstrap artifact, when `delivery_mode` is
+    /// `bootstrap`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bootstrap_size: Option<u64>,
+    /// Hex BLAKE3 of the bootstrap artifact bytes (integrity check).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bootstrap_blake3: Option<String>,
+    /// Estimated wire bytes of the chunk path for this client, so clients
+    /// can log/verify the server's routing decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_chunk_payload: Option<u64>,
 }
 
 /// Batch request: which track inits and segments to deliver.
@@ -543,6 +566,21 @@ mod tests {
         let json = serde_json::to_string(&bf).unwrap();
         let bf2: BloomFilter = serde_json::from_str(&json).unwrap();
         assert!(members.iter().all(|h| bf2.contains(h)));
+    }
+
+    #[test]
+    fn v1_session_response_still_parses() {
+        // A v1 server response has none of the dual-route fields: they must
+        // deserialize as None so old servers keep working with new clients.
+        let resp: SessionOpenResponse =
+            serde_json::from_str("{\"session_id\":\"s\",\"known_chunks\":3}").unwrap();
+        assert_eq!(resp.known_chunks, 3);
+        assert!(resp.delivery_mode.is_none());
+        assert!(resp.bootstrap_size.is_none());
+        assert!(resp.bootstrap_blake3.is_none());
+        // And a v2 response omits absent fields on the wire.
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(!json.contains("delivery_mode"));
     }
 
     #[test]
