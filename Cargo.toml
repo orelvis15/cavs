@@ -9,6 +9,7 @@ members = [
     "core/cavs-proto",
     "core/cavs-signature",
     "core/cavs-rebuild-plan",
+    "core/cavs-plan",
     "core/cavs-cli",
     "core/cavs-server",
     "core/cavs-client",
@@ -35,6 +36,7 @@ cavs-store = { path = "core/cavs-store", version = "0.6.0" }
 cavs-proto = { path = "core/cavs-proto", version = "0.6.0" }
 cavs-signature = { path = "core/cavs-signature", version = "0.6.0" }
 cavs-rebuild-plan = { path = "core/cavs-rebuild-plan", version = "0.6.0" }
+cavs-plan = { path = "core/cavs-plan", version = "0.6.0" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 axum = "0.8"

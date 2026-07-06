@@ -300,6 +300,7 @@ dependencies = [
  "cavs-format",
  "cavs-hash",
  "cavs-manifest",
+ "cavs-plan",
  "cavs-proto",
  "cavs-signature",
  "cavs-store",
@@ -364,6 +365,20 @@ dependencies = [
  "cavs-hash",
  "cavs-proto",
  "serde_json",
+ "thiserror",
+ "zstd",
+]
+
+[[package]]
+name = "cavs-plan"
+version = "0.6.0"
+dependencies = [
+ "cavs-hash",
+ "cavs-proto",
+ "cavs-signature",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror",
  "zstd",
 ]
