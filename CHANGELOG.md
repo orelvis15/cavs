@@ -6,6 +6,43 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0]
+
+The compact-manifest release: the runtime manifest now travels as a compact
+binary format (`CAVSMF2`) instead of JSON, cutting manifest wire overhead
+dramatically while keeping full JSON v1 compatibility for old clients and
+servers. Reconstruction, dual-route behavior and warm-cache savings are
+unchanged.
+
+### Added
+
+- **`cavs-manifest` crate.** One home for manifest wire formats: a strict
+  unsigned-LEB128 varint codec, the binary v2 encoder/decoder, and
+  `read_manifest`, which detects JSON v1 vs binary v2 from the bytes and
+  normalizes both into the same runtime `Manifest` — server, client and CLI
+  never branch on formats downstream.
+- **Binary manifest v2 (`CAVSMF2`).** Sectioned envelope (AssetInfo,
+  ChunkPlan, ChunkDictionary) with per-section BLAKE3 integrity. Chunk
+  hashes are stored once, as raw 32-byte BLAKE3, in a dictionary; every
+  chunk reference in the plan is a varint dictionary index instead of a
+  repeated 64-char hex string. Sections ≥ 32 KiB are zstd-compressed. The
+  decoder enforces hard limits (section count/size, decompression ratio,
+  string length, overlong varints) so malformed or hostile manifests fail
+  cleanly — verified by truncation sweeps and a full byte-flip test.
+- **Format negotiation.** `GET /api/assets/{asset}/manifest` serves binary
+  v2 when requested via `Accept: application/vnd.cavs.manifest-v2` or
+  `?format=binary-v2`; JSON v1 remains the default response, so v0.2.x
+  clients work unchanged. New per-format manifest counters in `/metrics`.
+- **Client negotiation + manifest metrics.** `cavs-client` asks for binary
+  v2 (JSON fallback keeps old servers working) and reports
+  `manifest.format/wire_bytes/parse_ms/chunk_count_logical/chunk_count_unique`
+  in `--stats-json`.
+- **`cavs manifest export`** — readable JSON v1 manifest from a `.cavs`
+  (debug/compatibility view).
+- **`cavs manifest bench`** — compares JSON v1 vs binary v2 for the same
+  container: wire bytes, parse time, bytes per logical chunk, savings; text
+  and `--json` output.
+
 ## [0.1.2]
 
 The v2 efficiency release: cold installs now cost *less* than downloading the
