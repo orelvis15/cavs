@@ -47,8 +47,8 @@ Full tables across every route: [ROUTE_BENCHMARKS.md](ROUTE_BENCHMARKS.md).
 
 ## Different models, honestly framed
 
-butler/Wharf is an excellent **pairwise patching workflow** with deep
-itch.io integration: a patch is computed per old→new pair, uploaded, and
+butler is an excellent **pairwise patching workflow** with deep itch.io
+integration: a patch is computed per old→new pair, uploaded, and
 optimized server-side.
 
 CAVS optimizes a different shape:
