@@ -154,6 +154,21 @@ certification/
   their decoders, and a bit flipped inside a reused old range must
   never produce a verified output.
 
+**Three different "no-op"s, certified in three different places.** They
+are easy to conflate, so the reports keep them apart:
+
+| Claim | What it means | Where it is certified |
+|---|---|---|
+| no-op **network** | a client that already has the new version re-fetches for ~0 bytes | routes section, `warm-cache` state (the online route planner resolves everything from cache) |
+| no-op **reapply** | re-running the update against an already-updated install succeeds and stays byte-identical | integrity section, "no-op reapply" row |
+| **no files rewritten** | that reapply also touches nothing on disk: directory applies detect every file as unchanged (0 written, N no-op) | integrity section, the same row's details |
+
+For a single-artifact plan there is no per-file no-op: the artifact is
+reconstructed from local bytes and the check instead asserts the plan
+payload carries at most the file's sub-block tail (the block differ
+always inlines the final partial block, even for identical inputs — a
+plan file is therefore never literally 0 bytes).
+
 Existing artifacts can be checked without the original bytes:
 
 ```bash
@@ -187,10 +202,17 @@ cavs certify regressions \
   --out ./certification/regressions
 ```
 
-- byte-size metrics compare exactly against the network threshold;
+- byte-size metrics compare exactly against the network threshold —
+  byte counts are deterministic for the same inputs, so any growth is
+  real;
 - `*_ms` metrics use the apply threshold **plus** a 250 ms absolute
-  noise floor (single-run wall-clock jitter is not a regression);
-  RAM metrics use the RAM threshold plus a 32 MiB floor;
+  noise floor, and RAM metrics the RAM threshold plus a 32 MiB floor.
+  A timing/RSS metric only fails when it exceeds *both* the relative
+  threshold and the floor. Why: wall-clock and RSS jitter run-to-run
+  even on the same machine — a 214 ms apply re-measured at 255 ms is
+  +19%, which would fail a 10% threshold on pure noise. The floor makes
+  small workloads immune to jitter while still catching real
+  regressions on workloads where timing matters (seconds and up);
 - losing byte-identical status always fails, no exceptions;
 - `--allow-regression metric=reason` accepts a named regression with an
   explicit reason (reported as a warning, exit 2);

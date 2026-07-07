@@ -8,6 +8,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.0.0] — The release certification suite
 
+Highlights:
+
+- New `cavs certify` release-readiness suite.
+- Certification profiles: quick, standard, release, strict, ci.
+- Deterministic reproducibility bundles.
+- Route certification across cold install, warm cache, previous
+  install, low RAM and slow HDD states.
+- Godot PCK certification using the real plugin API
+  (`CavsClient.fetch` / `fetch_async` / `ensure_pack`).
+- Regression guard with absolute noise floor for timing/RAM metrics.
+- v1.0.0 public trial guide at `/try`.
+
 CAVS v1.0.0 adds `cavs certify`, a full release-readiness workflow for
 game updates. Certification verifies integrity, byte-identical
 reconstruction, route selection, regression safety, Godot PCK

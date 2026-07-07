@@ -648,6 +648,22 @@ pub fn dispatch(action: Option<CertifyAction>, full: &FullArgs) -> i32 {
     }
 }
 
+/// Environment + dependency snapshot for standalone subcommand runs, so
+/// their report directories are as self-describing as a full run's.
+fn write_environment(out: &Path) -> Result<()> {
+    let env = crate::bench_env::capture(0);
+    std::fs::write(
+        out.join("environment.json"),
+        serde_json::to_vec_pretty(&env)?,
+    )?;
+    let deps = detect_dependencies(None, None, None, None, false);
+    std::fs::write(
+        out.join("dependencies.json"),
+        serde_json::to_vec_pretty(&deps)?,
+    )?;
+    Ok(())
+}
+
 fn result_to_exit(result: CheckResult, fail_on_warning: bool) -> i32 {
     match result {
         CheckResult::Pass | CheckResult::Skipped => EXIT_PASS,
@@ -688,6 +704,7 @@ fn run_integrity_cmd(
         validate_pair(o, n)?;
     }
     std::fs::create_dir_all(out)?;
+    write_environment(out)?;
     let mut commands = Vec::new();
     let inputs = integrity::Inputs {
         old,
@@ -719,6 +736,7 @@ fn run_routes_cmd(
 ) -> Result<i32> {
     validate_pair(old, new)?;
     std::fs::create_dir_all(out)?;
+    write_environment(out)?;
     let mut commands = Vec::new();
     let args = routes::Args {
         old,
@@ -756,6 +774,7 @@ fn run_regressions_cmd(
         }
     }
     std::fs::create_dir_all(out)?;
+    write_environment(out)?;
     let thresholds = regressions::Thresholds::parse(max_network, max_apply, max_ram)?;
     let (cur_metrics, cur_bi) = regressions::load_metrics(current)?;
     let (base_metrics, base_bi) = regressions::load_metrics(baseline)?;
@@ -784,6 +803,7 @@ fn run_godot_cmd(
 ) -> Result<i32> {
     validate_pair(old_pck, new_pck)?;
     std::fs::create_dir_all(out)?;
+    write_environment(out)?;
     let mut commands = Vec::new();
     let args = godot::Args {
         old_pck,
@@ -815,6 +835,7 @@ fn run_workspace_cmd(
         );
     }
     std::fs::create_dir_all(out)?;
+    write_environment(out)?;
     let mut commands = Vec::new();
     let outcome = workspace::run(ws, app, from, to, out, &mut commands)?;
     workspace::write_reports(&outcome, out)?;
