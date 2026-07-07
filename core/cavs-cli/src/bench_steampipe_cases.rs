@@ -345,6 +345,7 @@ struct CaseResult {
 struct CasesReport {
     seed: u64,
     assets_per_pack: usize,
+    environment: crate::bench_env::BenchEnvironment,
     results: Vec<CaseResult>,
     skipped: Vec<String>,
     note: String,
@@ -479,6 +480,7 @@ pub fn bench(args: &CasesArgs) -> Result<()> {
     let report = CasesReport {
         seed: args.seed,
         assets_per_pack: args.assets,
+        environment: crate::bench_env::capture(args.seed),
         results,
         skipped,
         note: cavs_analyzer::ESTIMATE_NOTE.into(),
@@ -527,6 +529,8 @@ fn markdown(r: &CasesReport) -> String {
         "Deterministic datasets (seed {}, {} × 1 MiB assets per pack).\n\n",
         r.seed, r.assets_per_pack
     ));
+    md.push_str(&crate::bench_env::markdown(&r.environment));
+    md.push_str("\n## Results\n\n");
     md.push_str("| Case | New size | SteamPipe-style | Changed chunks | Fixed reuse | CDC reuse | CAVS .cavsplan | butler | bsdiff | xdelta3 | Diagnosis |\n");
     md.push_str("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n");
     for res in &r.results {

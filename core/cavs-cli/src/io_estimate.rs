@@ -226,9 +226,11 @@ pub fn io_estimate(args: &IoArgs) -> Result<()> {
         old: analysis.old_build.clone(),
         new: analysis.new_build.clone(),
         routes: routes_from_analysis(&analysis, &profiles),
-        note: "I/O figures are estimates from the update model; device times assume \
-               sequential throughput plus per-seek latency."
-            .into(),
+        note: format!(
+            "I/O figures are estimates from the update model; device times assume \
+             sequential throughput plus per-seek latency. {}",
+            cavs_analyzer::ESTIMATE_NOTE
+        ),
     };
 
     if args.json {
@@ -256,6 +258,7 @@ pub fn io_estimate(args: &IoArgs) -> Result<()> {
                 .collect();
             println!("  {:<30} {}", "", times.join("  ·  "));
         }
+        println!("note    : {}", report.note);
     }
     if let Some(path) = args.out {
         std::fs::write(path, markdown(&report))?;

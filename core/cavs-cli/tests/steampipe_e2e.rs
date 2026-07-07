@@ -1,4 +1,4 @@
-//! End-to-end tests for the v0.9.0 SteamPipe-class analysis commands,
+//! End-to-end tests for the v0.9.0 SteamPipe-style analysis commands,
 //! driving the real `cavs` binary: model estimates, diagnostics,
 //! workspace/depot/branch flow, install plans, io-estimate, plan-update,
 //! Godot PCK analysis and build signing/encryption.

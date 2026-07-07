@@ -6,7 +6,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.9.0] — SteamPipe-class local analysis
+## [0.9.0] — SteamPipe-style local analysis
 
 CAVS now includes a SteamPipe-style update analyzer and build
 optimization toolkit. This release does not create a separate

@@ -40,7 +40,8 @@ The SteamPipe-style analyzer is:
 
 It is **not** a Steam product, a Valve-compatible tool, an official
 SteamPipe implementation, or a SteamPipe replacement. Allowed naming:
-*SteamPipe-style*, *SteamPipe-inspired*, *SteamPipe-class*,
-*SteamPipe update model estimate*. See
+*SteamPipe-style*, *SteamPipe-inspired*,
+*SteamPipe update model estimate* — always as an estimated model,
+never as real SteamPipe compatibility. See
 [STEAMPIPE_STYLE_MODEL.md](STEAMPIPE_STYLE_MODEL.md) for what the model
 does and does not claim.

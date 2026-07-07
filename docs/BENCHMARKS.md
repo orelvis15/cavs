@@ -353,7 +353,7 @@ Full tables: [ROUTE_BENCHMARKS.md](ROUTE_BENCHMARKS.md); planner:
 [DELIVERY_PLANNER.md](DELIVERY_PLANNER.md); sidecar format and policy:
 [PAIRWISE_SIDECARS.md](PAIRWISE_SIDECARS.md).
 
-## SteamPipe-class analysis (v0.9.0)
+## SteamPipe-style analysis (v0.9.0)
 
 v0.9.0 turns CAVS into a build-update lab: a SteamPipe-style
 fixed-1MiB update model (`cavs bench steampipe-style`), the layout

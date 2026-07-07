@@ -4,12 +4,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>CAVS — Products</title>
-<meta name="description" content="The CAVS toolkit: the cavs CLI and its command reference, cavs-server and cavs-client, the Rust core engine, the Godot plugin, the SteamPipe-class build & update analyzer, and the Unity / Unreal plugins on the way." />
+<meta name="description" content="The CAVS toolkit: the cavs CLI and its command reference, cavs-server and cavs-client, the Rust core engine, the Godot plugin, the SteamPipe-style build & update analyzer, and the Unity / Unreal plugins on the way." />
 <meta name="author" content="Orelvis" />
 <meta name="theme-color" content="#0A0E1A" />
 <meta property="og:type" content="website" />
 <meta property="og:title" content="CAVS Products" />
-<meta property="og:description" content="CLI, server, client, Rust core, Godot plugin and the SteamPipe-class build analyzer — with commands explained." />
+<meta property="og:description" content="CLI, server, client, Rust core, Godot plugin and the SteamPipe-style build analyzer — with commands explained." />
 <meta property="og:image" content="assets/og-thumb.webp" />
 <link rel="icon" type="image/png" href="assets/logo-transparent-128.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -54,7 +54,7 @@
   <div class="wrap">
     <span class="eyebrow">The toolkit</span>
     <h1>One engine.<br><span class="accent">Many surfaces.</span></h1>
-    <p class="section-sub">CAVS is a Rust core wrapped in a command-line toolkit, an HTTP origin and a streaming client — plus a shipping Godot plugin, a SteamPipe-class build &amp; update analyzer built into the CLI, and engine plugins on the way. Everything below is Apache-2.0 licensed and lives in one repository.</p>
+    <p class="section-sub">CAVS is a Rust core wrapped in a command-line toolkit, an HTTP origin and a streaming client — plus a shipping Godot plugin, a SteamPipe-style build &amp; update analyzer built into the CLI, and engine plugins on the way. Everything below is Apache-2.0 licensed and lives in one repository.</p>
   </div>
 </section>
 
@@ -150,7 +150,7 @@
       <div class="cmd-row"><code>cavs publish-dir &lt;new&gt; --previous &lt;old&gt; --out-dir &lt;dir&gt;</code><div class="cmd-desc">One-pass publishing: container + signature + plan + sidecar, preceded by a preview with rename detection and compressed-blob warnings.</div></div>
     </div>
 
-    <h3 style="font-size:18px; margin:36px 0 6px;" class="mono blue">// SteamPipe-class analysis — v0.9.0</h3>
+    <h3 style="font-size:18px; margin:36px 0 6px;" class="mono blue">// SteamPipe-style analysis — v0.9.0</h3>
     <div class="cmd-list">
       <div class="cmd-row"><code>cavs bench steampipe-style &lt;old&gt; &lt;new&gt;</code><div class="cmd-desc">Estimate the update under a public fixed-1MiB chunk model: changed chunks, estimated download, per-file ranking, local rebuild I/O. <span class="mono">--scope per-file|global</span>, <span class="mono">--compression</span>, <span class="mono">--json</span>. Always labeled as an estimate — never Valve's implementation.</div></div>
       <div class="cmd-row"><code>cavs analyze steampipe &lt;old&gt; &lt;new&gt;</code><div class="cmd-desc">The diagnosis: scattered churn, asset shuffling, distributed-TOC/offset cascades, compressed blobs, metadata churn and oversized packs — each finding with severity, wasted bytes, cause, fix and expected improvement. Engine hints for Unreal / Unity / Godot.</div></div>
@@ -275,7 +275,7 @@
     <div class="section-head">
       <span class="eyebrow">Build &amp; Update Analyzer <span class="badge available" style="margin-left:8px;">new in 0.9</span></span>
       <h2 class="section-title">Measure and fix update behavior<br>before you publish.</h2>
-      <p class="section-sub">v0.9.0 makes CAVS a SteamPipe-class local build-update lab. Estimate a build transition under a public fixed-1MiB chunk model, diagnose the pack layouts that bloat updates (scattered churn, asset shuffling, distributed-TOC/offset cascades, global compression, metadata churn), preview every delivery route before release, and price the local disk I/O per device — entirely locally, uploading nothing. Every estimate is SteamPipe-<em>style</em>: a model from public documentation, never Valve's implementation. There is deliberately no separate steam-analyzer product.</p>
+      <p class="section-sub">v0.9.0 makes CAVS a SteamPipe-style local build-update lab. Estimate a build transition under a public fixed-1MiB chunk model, diagnose the pack layouts that bloat updates (scattered churn, asset shuffling, distributed-TOC/offset cascades, global compression, metadata churn), preview every delivery route before release, and price the local disk I/O per device — entirely locally, uploading nothing. Every estimate is SteamPipe-<em>style</em>: a model from public documentation, never Valve's implementation. There is deliberately no separate steam-analyzer product.</p>
     </div>
     <pre class="code"><span class="comment"># the numbers — fixed-1MiB model estimate</span>
 <span class="prompt">$</span> cavs bench steampipe-style ./build_v1 ./build_v2 <span class="flag">--out</span> results/

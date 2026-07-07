@@ -9,6 +9,7 @@ mod bench_butler;
 mod bench_butler_full;
 mod bench_compression;
 mod bench_delta;
+mod bench_env;
 mod bench_pairwise;
 mod bench_pipeline;
 mod bench_routes;

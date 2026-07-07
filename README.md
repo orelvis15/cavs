@@ -59,7 +59,7 @@ a pixel codec.
   O(N²)); `cavs publish-dir` produces a whole release in one pass; and
   `cavs bench full-pipeline` proves it against the complete external
   butler pipeline (default *and* rediff-optimized patches).
-- **SteamPipe-class local analysis (v0.9.0)**: measure and fix update
+- **SteamPipe-style local analysis (v0.9.0)**: measure and fix update
   behavior *before* publishing. `cavs bench steampipe-style` estimates a
   build transition under a public fixed-1MiB model; `cavs analyze
   steampipe` / `analyze-packs` / `analyze godot-pck` diagnose scattered
@@ -360,7 +360,7 @@ byte-level delta automatically (2.53 MiB where block routes paid
 [docs/DELIVERY_PLANNER.md](docs/DELIVERY_PLANNER.md),
 [docs/PAIRWISE_SIDECARS.md](docs/PAIRWISE_SIDECARS.md).
 
-### SteamPipe-class local analysis (v0.9.0)
+### SteamPipe-style local analysis (v0.9.0)
 
 ```sh
 # The numbers: how would a fixed-1MiB chunk model price this update?

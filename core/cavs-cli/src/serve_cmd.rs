@@ -79,8 +79,12 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
         .route("/api/preview", get(preview))
         .with_state(state);
 
-    eprintln!("[serve] WARNING: development server — no auth, no TLS, not production hardened.");
-    eprintln!("[serve] use cavs-server for real deployments.");
+    eprintln!("+----------------------------------------------------------------+");
+    eprintln!("|  WARNING: DEVELOPMENT SERVER ONLY                              |");
+    eprintln!("|  No auth, no TLS, not production hardened.                     |");
+    eprintln!("|  Never expose this to the internet or real players.            |");
+    eprintln!("|  Use cavs-server for real deployments.                         |");
+    eprintln!("+----------------------------------------------------------------+");
     if let Some(branch) = &args.branch {
         eprintln!("[serve] default branch: {branch}");
     }
@@ -103,7 +107,7 @@ async fn index(State(state): State<Shared>) -> Response {
     (
         StatusCode::OK,
         format!(
-            "cavs serve — local development content server (not production hardened)\n\
+            "cavs serve — DEVELOPMENT SERVER ONLY (no auth, no TLS, not production hardened)\n\
              workspace: {}\n\
              default app: {app}\n\n\
              endpoints:\n\

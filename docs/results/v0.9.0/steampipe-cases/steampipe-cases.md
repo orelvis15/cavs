@@ -4,6 +4,23 @@
 
 Deterministic datasets (seed 9, 32 × 1 MiB assets per pack).
 
+## Environment
+
+| | |
+|---|---|
+| OS | macOS 26.5.1 (Darwin 25.5.0) (aarch64) |
+| CPU | Apple M3 Pro |
+| RAM | 36 GiB |
+| Disk | APFS (internal NVMe SSD) |
+| CAVS | cavs 0.9.0 |
+| bsdiff | present: bsdiff oldfile newfile patchfile |
+| xdelta3 | Xdelta version 3.2.0, Copyright (C) Joshua MacDonald |
+| zstd (linked library) | 1.5.7 |
+| Command | `/Users/l41777/Documents/repositories/bitlakelab/cavs-oss/target/release/cavs bench steampipe-cases --out /Users/l41777/Documents/repositories/bitlakelab/cavs-oss/docs/results/v0.9.0/steampipe-cases --assets 32 --seed 9 --include-pairwise` |
+| Dataset seed | 9 |
+
+## Results
+
 | Case | New size | SteamPipe-style | Changed chunks | Fixed reuse | CDC reuse | CAVS .cavsplan | butler | bsdiff | xdelta3 | Diagnosis |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | pack-localized-small | 32.88 MiB | 1.00 MiB | 1 of 33 | 97.0% | 99.6% | 131.48 KiB | — | 64.82 KiB | 64.30 KiB | localized / OK |

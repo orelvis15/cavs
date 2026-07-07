@@ -25,9 +25,10 @@ SteamPipe-style estimate based on public documentation.
 This is not Valve's exact SteamPipe implementation.
 ```
 
-Naming follows the same rule everywhere: *SteamPipe-style*,
-*SteamPipe-inspired*, *SteamPipe-class* — never "SteamPipe compatible"
-or "SteamPipe replacement". There is also deliberately no separate
+Naming follows the same rule everywhere: *SteamPipe-style* or
+*SteamPipe-inspired*, always presented as an **estimated model** —
+never "SteamPipe compatible", "SteamPipe replacement" or any claim of
+real SteamPipe compatibility. There is also deliberately no separate
 `steam-analyzer` product; see
 [WHY_NO_STEAM_ANALYZER_PRODUCT.md](WHY_NO_STEAM_ANALYZER_PRODUCT.md).
 
