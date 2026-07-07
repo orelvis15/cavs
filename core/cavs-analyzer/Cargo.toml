@@ -1,24 +1,16 @@
 [package]
-name = "cavs-steam"
+name = "cavs-analyzer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Estimate a game build's SteamPipe update size and detect pack files causing update bloat."
+description = "SteamPipe-style update models, pack-file diagnostics and layout recommendations for CAVS builds."
 repository.workspace = true
 homepage.workspace = true
-readme = "README.md"
-keywords = ["steam", "steampipe", "gamedev", "dedup", "cavs"]
-categories = ["command-line-utilities", "game-development"]
-
-[[bin]]
-name = "cavs-steam"
-path = "src/main.rs"
 
 [dependencies]
 cavs-hash = { workspace = true }
 cavs-chunker = { workspace = true }
 anyhow = { workspace = true }
-clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 zstd = { workspace = true }
