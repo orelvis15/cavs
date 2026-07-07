@@ -1,0 +1,33 @@
+{
+  "versions": 10,
+  "version_bytes": 25165824,
+  "cavs_adjacent_served": [
+    1315364,
+    1043585,
+    1106940,
+    1133519,
+    1001587,
+    1129385,
+    1221512,
+    1252077,
+    1019975
+  ],
+  "cavs_jump_v1_to_vn_served": 6895852,
+  "cavs_jump_v3_to_vn_served": 6189240,
+  "cavs_store_bytes": 23520073,
+  "cavs_store_packfiles": 10,
+  "bsdiff_adjacent_bytes": [
+    331549,
+    331477,
+    462910,
+    331422,
+    200508,
+    462753,
+    330851,
+    462921,
+    331447
+  ],
+  "bsdiff_jump_v1_to_vn_bytes": 2910680,
+  "bsdiff_all_pairs_count": 45,
+  "notes": []
+}

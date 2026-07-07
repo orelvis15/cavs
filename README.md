@@ -59,6 +59,19 @@ a pixel codec.
   O(N²)); `cavs publish-dir` produces a whole release in one pass; and
   `cavs bench full-pipeline` proves it against the complete external
   butler pipeline (default *and* rediff-optimized patches).
+- **SteamPipe-style local analysis (v0.9.0)**: measure and fix update
+  behavior *before* publishing. `cavs bench steampipe-style` estimates a
+  build transition under a public fixed-1MiB model; `cavs analyze
+  steampipe` / `analyze-packs` / `analyze godot-pck` diagnose scattered
+  churn, asset shuffling, distributed-TOC/offset cascades, compressed
+  blobs and metadata churn — with concrete fixes; `cavs publish-preview`
+  measures every route and recommends one; `cavs io-estimate` prices the
+  local disk I/O per device; `cavs plan-update` scores routes under
+  explicit policies; a local app/depot/branch/build **workspace** models
+  depots, branches, promotion/rollback, content sharing and install
+  plans; `cavs serve` exposes it all to dev clients; and `cavs build
+  sign/encrypt` adds release authenticity (not DRM). Estimates are
+  SteamPipe-*style* — a public model, never Valve's implementation.
 - **Complementary, not competitive**: use the best codec/compressor for the
   bytes; CAVS deduplicates and transports above them.
 
@@ -107,8 +120,7 @@ the paper, [`docs/PAPER.md`](docs/PAPER.md).
 
 | Folder | What |
 |---|---|
-| [`core/`](core) | The delivery engine (Rust): chunking, hashing, the `.cavs` format, the global content-addressable store, the CVSP protocol, and the `cavs` / `cavs-server` / `cavs-client` binaries |
-| [`steam-analyzer/`](steam-analyzer) | `cavs-steam` — estimates the SteamPipe update size of a build and flags pack files that cause update bloat, before you publish to Steam |
+| [`core/`](core) | The delivery engine (Rust): chunking, hashing, the `.cavs` format, the global content-addressable store, the CVSP protocol, the SteamPipe-style analyzer (`cavs-analyzer`), the local workspace model (`cavs-workspace`), and the `cavs` / `cavs-server` / `cavs-client` binaries |
 | [`godot-plugin/`](godot-plugin) | Godot 4 runtime client in pure GDScript: downloads, verifies and mounts packs with `load_resource_pack()` |
 | [`unity-plugin/`](unity-plugin) | Unity package — **coming soon** |
 | [`unreal-plugin/`](unreal-plugin) | Unreal Engine plugin — **coming soon** |
@@ -132,10 +144,11 @@ cargo build --release
 
 This produces the binaries in `target/release/`:
 
-- `cavs` — the packaging CLI
+- `cavs` — the packaging CLI (including the SteamPipe-style analysis
+  commands: `analyze steampipe`, `bench steampipe-style`,
+  `publish-preview`, `analyze-packs`, `io-estimate`, `plan-update`)
 - `cavs-server` — the origin server
 - `cavs-client` — the native client
-- `cavs-steam` — the SteamPipe analyzer
 
 ### Test
 
@@ -347,15 +360,54 @@ byte-level delta automatically (2.53 MiB where block routes paid
 [docs/DELIVERY_PLANNER.md](docs/DELIVERY_PLANNER.md),
 [docs/PAIRWISE_SIDECARS.md](docs/PAIRWISE_SIDECARS.md).
 
-### Analyze a Steam build
+### SteamPipe-style local analysis (v0.9.0)
 
 ```sh
-./target/release/cavs-steam compare ./build_v1 ./build_v2 --out report
-open report/index.html
+# The numbers: how would a fixed-1MiB chunk model price this update?
+./target/release/cavs bench steampipe-style ./Build_v1 ./Build_v2 --out results/
+
+# The diagnosis: why is it expensive, and what should change?
+./target/release/cavs analyze steampipe ./Build_v1 ./Build_v2 --out analysis.md
+./target/release/cavs analyze-packs ./Build_v1 ./Build_v2 --out packs.md
+./target/release/cavs analyze godot-pck old.pck new.pck --out pck.md
+./target/release/cavs optimize-layout ./Build_v1 ./Build_v2 --write-plan layout.json
+
+# The decision: every route measured, one recommended, before you ship
+./target/release/cavs publish-preview ./Build_v2 --previous ./Build_v1 --routes all
+./target/release/cavs io-estimate ./Build_v1 ./Build_v2
+./target/release/cavs plan-update --from ./v1 --to ./v2 \
+  --client-state has-previous-install,slow-hdd --policy hdd_friendly
+
+# The workspace: SteamPipe-like depots/branches/builds as local metadata
+./target/release/cavs workspace init ./ws --app my-game
+./target/release/cavs depot add windows --workspace ./ws --platform windows
+./target/release/cavs branch add beta --workspace ./ws
+./target/release/cavs build create --workspace ./ws --branch beta \
+  --depot windows=./Build/Windows --label v1
+./target/release/cavs depot analyze-sharing --workspace ./ws
+./target/release/cavs install-plan --workspace ./ws --branch beta \
+  --platform windows --owned base,dlc1 --from build_1001
+./target/release/cavs serve ./ws --port 8990   # dev-only content server
+
+# Release authenticity (not DRM)
+./target/release/cavs build sign build.cavs --key cavs.key
+./target/release/cavs build verify build.cavs --pub cavs.pub
 ```
 
-See [`godot-plugin/README.md`](godot-plugin/README.md) for game integration and
-[`steam-analyzer/README.md`](steam-analyzer/README.md) for the analyzer.
+Measured on the pathology suite: the same 64 KiB edit costs **1 MiB or
+the whole 32.88 MiB pack** under the fixed model depending only on
+layout — and the analyzer names the cause and the fix; the CAVS
+`.cavsplan` for the shifted pack is **7.4 KiB**. A ~3-byte change in a
+256 MiB pack still costs **512 MiB of local I/O** unless the pack is
+split. The estimates use a public fixed-1MiB model — SteamPipe-*style*,
+never Valve's exact implementation
+([docs/STEAMPIPE_STYLE_MODEL.md](docs/STEAMPIPE_STYLE_MODEL.md)) — and
+there is deliberately no separate `steam-analyzer` product
+([docs/WHY_NO_STEAM_ANALYZER_PRODUCT.md](docs/WHY_NO_STEAM_ANALYZER_PRODUCT.md)).
+Full story: [docs/STEAMPIPE_COMPARISON.md](docs/STEAMPIPE_COMPARISON.md),
+[docs/BUILD_UPDATE_ANALYZER.md](docs/BUILD_UPDATE_ANALYZER.md).
+
+See [`godot-plugin/README.md`](godot-plugin/README.md) for game integration.
 
 ## Components
 
@@ -393,7 +445,17 @@ See [`godot-plugin/README.md`](godot-plugin/README.md) for game integration and
 - **Godot plugin**: `CavsClient` in pure GDScript (no native binaries) —
   install as an addon, mount packs at runtime. See
   [`godot-plugin/README.md`](godot-plugin/README.md).
-- **SteamPipe Analyzer**: see [`steam-analyzer/README.md`](steam-analyzer/README.md).
+- **SteamPipe-style analysis** (v0.9.0, inside the `cavs` CLI): update-cost
+  estimation under a public fixed-1MiB model (`bench steampipe-style`),
+  layout diagnosis with recommendations (`analyze steampipe`,
+  `analyze-packs`, `analyze godot-pck`, `optimize-layout`), release
+  previews across every route (`publish-preview`), local disk I/O
+  estimates (`io-estimate`), a policy-scored route planner
+  (`plan-update`), a local app/depot/branch/build workspace with sharing
+  analysis and install-plan simulation, a dev content server
+  (`cavs serve`) and local signing/encryption (`build sign` /
+  `build encrypt` — authenticity, not DRM). See
+  [docs/BUILD_UPDATE_ANALYZER.md](docs/BUILD_UPDATE_ANALYZER.md).
 
 ## Contributing
 

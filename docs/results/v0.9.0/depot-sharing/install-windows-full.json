@@ -1,0 +1,35 @@
+{
+  "app": "my-game",
+  "branch": "public",
+  "platform": "windows",
+  "language": "es",
+  "owned": [
+    "windows",
+    "lang-es",
+    "hd-textures"
+  ],
+  "from_build": null,
+  "to_build": "build_1001",
+  "depots": [
+    {
+      "depot": "windows",
+      "action": "install",
+      "bytes": 51496733,
+      "route": "bootstrap"
+    },
+    {
+      "depot": "lang-es",
+      "action": "install",
+      "bytes": 4000000,
+      "route": "bootstrap"
+    },
+    {
+      "depot": "hd-textures",
+      "action": "install",
+      "bytes": 9000000,
+      "route": "bootstrap"
+    }
+  ],
+  "total_bytes": 64496733,
+  "note": "estimates from content indices (raw new chunk bytes, before wire compression)"
+}

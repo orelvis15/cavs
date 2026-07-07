@@ -6,6 +6,111 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] — SteamPipe-style local analysis
+
+CAVS now includes a SteamPipe-style update analyzer and build
+optimization toolkit. This release does not create a separate
+steam-analyzer product; instead, SteamPipe-style analysis is integrated
+directly into the CAVS CLI (the previous standalone `steam-analyzer`
+crate was removed — see `docs/WHY_NO_STEAM_ANALYZER_PRODUCT.md`).
+
+### Results
+
+Measured on the deterministic v0.9.0 suite
+(`docs/results/v0.9.0/`, reproducible with
+`cavs bench steampipe-cases` and the commands in its README):
+
+- The same 64 KiB edit in a 32-asset pack costs 1.00 MiB (localized),
+  1.88 MiB (TOC centralized) or the whole 32.88 MiB pack (shifted /
+  shuffled / distributed-TOC) under the fixed-1MiB model; the CAVS
+  `.cavsplan` for the shifted pack is 7.4 KiB.
+- The analyzer diagnoses every pathology case (`asset_shuffling`,
+  `toc_churn`, compressed blobs) and the recommended fixes recover
+  94% / 75% fixed-chunk reuse when applied.
+- A ~3-byte change in a 256 MiB pack downloads 2 MiB but costs 512 MiB
+  of local disk I/O — slower than a full download on an HDD; splitting
+  the pack cuts it to 128 MiB. `cavs io-estimate` flags exactly this.
+- Windows ↔ Linux depots share 98.9% of their bytes; a demo owner with
+  the full build installed downloads 0 B (cross-depot chunk reuse).
+- The content-addressed store holds a 10-release stream in 22.43 MiB
+  and serves any version jump; direct pairwise coverage would need 45
+  patches.
+
+### Added
+
+- `cavs bench steampipe-style` for fixed-1MiB public-model update
+  estimates (per-file or global scope, configurable chunk size and
+  compression, artifact and directory modes, JSON/Markdown output).
+- `cavs analyze steampipe` for diagnosing large updates and bad pack
+  layouts: scattered churn, asset shuffling, distributed-TOC/offset
+  churn, compression across asset boundaries, timestamp/build-id
+  churn, oversized packs and new-content-in-old-pack — each finding
+  with severity, estimated wasted bytes, cause, fix and expected
+  improvement. `cavs analyze update-cost` as the numbers-only alias.
+- `cavs publish-preview` for comparing update routes before release:
+  measured full/CAVS routes, butler and bsdiff/xdelta3 when installed
+  (missing tools skipped with a warning), the SteamPipe-style estimate
+  row, release-readiness warnings and a recommended route.
+- `cavs analyze-packs` for pack-file churn, shuffling, TOC and
+  compression diagnostics (heatmaps at 64 KiB / 1 MiB / 8 MiB windows,
+  scatteredness score, entropy, size advisories, engine hints).
+- `cavs io-estimate` for local disk I/O and temporary-storage estimates
+  per route, timed under configurable device profiles (HDD/SATA/NVMe).
+- Local app/depot/branch/build workspace (`cavs workspace init`,
+  `depot add`, `branch add`, `build create`) with atomic branch
+  promotion/rollback and per-depot promotion previews.
+- Shared depot/content reuse analysis (`cavs depot analyze-sharing`).
+- Install-plan simulator by platform, language and ownership with
+  cross-depot chunk reuse (`cavs install-plan`).
+- Local content server for development/testing (`cavs serve`):
+  branches, builds, depot files with HTTP Range, chunks by hash,
+  update previews; explicitly not production hardened.
+- Godot PCK analyzer (`cavs analyze godot-pck`): byte-level report
+  plus, when the PCK directory is parseable (format v1/v2), the
+  `res://` paths behind each changed region.
+- Route planner with policy scoring (`cavs plan-update`):
+  network_min / cpu_min / ram_min / disk_io_min / balanced /
+  hdd_friendly / developer_fast, per client state; unavailable routes
+  are never chosen.
+- Patch-friendly layout optimizer (`cavs optimize-layout`), advisory
+  only, with `--write-plan` JSON for automation.
+- Local signing and optional encryption for release artifacts
+  (`cavs build sign / verify / encrypt / decrypt / content-key`) —
+  release authenticity, explicitly not DRM.
+- `cavs bench steampipe-cases`: the deterministic pack-pathology
+  benchmark (localized/shifted/shuffled/TOC/compression/new-pack/
+  directory/Godot-PCK cases) measured under the model, real
+  `.cavsplan`s and external tools.
+- New library crates `cavs-analyzer` (model, heatmaps, entropy,
+  detectors, recommendations) and `cavs-workspace` (workspace
+  metadata, content indices, sharing math).
+- New error codes: `CAVS-E-STEAMPIPE-MODEL-INVALID`,
+  `CAVS-E-ANALYZE-PATH-MISSING`, `CAVS-E-ANALYZE-PATH-TRAVERSAL`,
+  `CAVS-E-WORKSPACE-CORRUPT`, `CAVS-E-DEPOT-NOT-FOUND`,
+  `CAVS-E-BRANCH-NOT-FOUND`, `CAVS-E-BUILD-NOT-FOUND`,
+  `CAVS-E-INSTALL-PLAN-INVALID`, `CAVS-E-ROUTE-NOT-AVAILABLE`,
+  `CAVS-E-GODOT-PCK-UNSUPPORTED`.
+- Documentation: `STEAMPIPE_STYLE_MODEL.md`, `STEAMPIPE_COMPARISON.md`,
+  `WHY_NO_STEAM_ANALYZER_PRODUCT.md`, `BUILD_UPDATE_ANALYZER.md`,
+  `PACK_FILE_OPTIMIZATION.md`, `DEPOTS_BRANCHES_WORKSPACE.md`,
+  `ROUTE_PLANNER.md`, `LOCAL_CONTENT_SERVER.md`,
+  `GODOT_PCK_ANALYZER.md`, `IO_ESTIMATOR.md`.
+
+### Changed
+
+- Removed the standalone `steam-analyzer` crate and the `cavs-steam`
+  binary; its analysis lives in `cavs analyze` / `cavs bench
+  steampipe-style` with strictly more capability. Docs, README and the
+  landing site no longer present a separate analyzer product.
+- Workspace version 0.9.0.
+
+### Notes
+
+The SteamPipe-style model is based on public documentation and is not
+Valve's exact SteamPipe implementation. It is intended to help
+developers understand fixed-chunk update behavior, pack-file churn and
+local update costs. Every report carries that labeling.
+
 ## [0.8.0] — Auto-route optimized delivery
 
 CAVS v0.8.0 introduces auto-route optimized delivery: a planner that can

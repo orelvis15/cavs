@@ -1,0 +1,82 @@
+[
+  {
+    "depot_a": "windows",
+    "depot_b": "linux",
+    "shared_bytes": 51196733,
+    "unique_a_bytes": 300000,
+    "unique_b_bytes": 260000,
+    "reuse_ratio": 0.9891801516915684
+  },
+  {
+    "depot_a": "windows",
+    "depot_b": "demo",
+    "shared_bytes": 6042429,
+    "unique_a_bytes": 45454304,
+    "unique_b_bytes": 0,
+    "reuse_ratio": 0.1173361618881726
+  },
+  {
+    "depot_a": "linux",
+    "depot_b": "demo",
+    "shared_bytes": 6042429,
+    "unique_a_bytes": 45414304,
+    "unique_b_bytes": 0,
+    "reuse_ratio": 0.1174273734012612
+  },
+  {
+    "depot_a": "windows",
+    "depot_b": "lang-es",
+    "shared_bytes": 917504,
+    "unique_a_bytes": 50579229,
+    "unique_b_bytes": 4000000,
+    "reuse_ratio": 0.016532576791502305
+  },
+  {
+    "depot_a": "linux",
+    "depot_b": "lang-es",
+    "shared_bytes": 917504,
+    "unique_a_bytes": 50539229,
+    "unique_b_bytes": 4000000,
+    "reuse_ratio": 0.01654450145846132
+  },
+  {
+    "depot_a": "windows",
+    "depot_b": "hd-textures",
+    "shared_bytes": 0,
+    "unique_a_bytes": 51496733,
+    "unique_b_bytes": 9000000,
+    "reuse_ratio": 0.0
+  },
+  {
+    "depot_a": "linux",
+    "depot_b": "hd-textures",
+    "shared_bytes": 0,
+    "unique_a_bytes": 51456733,
+    "unique_b_bytes": 9000000,
+    "reuse_ratio": 0.0
+  },
+  {
+    "depot_a": "demo",
+    "depot_b": "lang-es",
+    "shared_bytes": 0,
+    "unique_a_bytes": 6042429,
+    "unique_b_bytes": 4917504,
+    "reuse_ratio": 0.0
+  },
+  {
+    "depot_a": "demo",
+    "depot_b": "hd-textures",
+    "shared_bytes": 0,
+    "unique_a_bytes": 6042429,
+    "unique_b_bytes": 9000000,
+    "reuse_ratio": 0.0
+  },
+  {
+    "depot_a": "lang-es",
+    "depot_b": "hd-textures",
+    "shared_bytes": 0,
+    "unique_a_bytes": 4917504,
+    "unique_b_bytes": 9000000,
+    "reuse_ratio": 0.0
+  }
+]
