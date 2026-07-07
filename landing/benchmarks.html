@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CAVS — Benchmarks</title>
+<meta name="description" content="Measured CAVS benchmarks: update payloads on real Godot PCKs, cold-install dual route, manifest overhead, multi-route delivery vs butler / xdelta3 / bsdiff, storage dedup, and honest negatives." />
+<meta name="author" content="Orelvis" />
+<meta name="theme-color" content="#0A0E1A" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="CAVS Benchmarks" />
+<meta property="og:description" content="Measured, not projected. Update payloads, cold install, manifest overhead, multi-route delivery, storage dedup." />
+<meta property="og:image" content="assets/og-thumb.webp" />
+<link rel="icon" type="image/png" href="assets/logo-transparent-128.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/styles.css" />
+<script>(function(){try{var t=localStorage.getItem('cavs-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="bg-grid"></div>
+
+<!-- ============ NAV ============ -->
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="brand">
+      <img src="assets/logo-transparent-128.png" alt="CAVS logo" />
+      CAVS <span class="tag">v0.8.0</span>
+    </a>
+    <nav class="nav-links" id="navLinks">
+      <a class="nav-page" href="index.html">Home</a>
+      <a class="nav-page active" href="benchmarks.html">Benchmarks</a>
+      <a class="nav-page" href="products.html">Products</a>
+      <a class="nav-page" href="changelog.html">Changelog</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle light / dark">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </button>
+      <a class="btn btn-primary btn-sm" href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49l-.01-1.9c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9l-.01 2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
+        Star
+      </a>
+    </nav>
+    <button class="burger" id="burger" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- ============ PAGE HEAD ============ -->
+<section class="page-head">
+  <div class="wrap">
+    <span class="eyebrow">Measured, not projected</span>
+    <h1>The <span class="accent">benchmarks</span>, in full.</h1>
+    <p class="section-sub">Every number here is measured. Update payloads were captured over real HTTP sessions (<span class="mono">cavs-server</span> + <span class="mono">cavs-client</span>). Real-game figures come from open-source Godot projects exported to PCK at two real points in their git history. "Update" means what a player who already has the previous version downloads; the full-download baseline is the new release compressed with zstd&nbsp;-3.</p>
+    <div class="trust" style="margin-top:26px;">
+      <span><i class="dot"></i>butler v15.28.0 · xdelta3 3.2.0 · bsdiff 4.3</span>
+      <span><i class="dot"></i>Apple M3 Pro, release binaries</span>
+      <span><i class="dot"></i>every output byte-identical (cmp / BLAKE3)</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ UPDATE PAYLOAD ============ -->
+<section class="anchor" id="update" style="padding-top:56px;">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The strong case</span>
+      <h2 class="section-title">Update payloads on real games.</h2>
+      <p class="section-sub">A player who already has the previous version downloads only the missing chunks required to reconstruct the new release.</p>
+    </div>
+    <div class="chart reveal" data-chart='{"title":"Full download vs CAVS update","subtitle":"MiB, lower is better","legend":[{"name":"Full download (zstd)","cls":"bar-a"},{"name":"CAVS update","cls":"bar-c"}],"groups":[{"label":"godotengine / tps-demo — tag 4.5 → master, 7 files","bars":[{"name":"Full","v":247.60,"cls":"bar-a","text":"247.60 MiB"},{"name":"CAVS","v":1.64,"cls":"bar-c","text":"1.64 MiB  −99.3%"}]},{"label":"GDQuest 3D third-person — HEAD~10 → HEAD, 468 files","bars":[{"name":"Full","v":27.61,"cls":"bar-a","text":"27.61 MiB"},{"name":"CAVS","v":8.70,"cls":"bar-c","text":"8.70 MiB  −68.5%"}]},{"label":"MechanicalFlower / Marble — 1.6.0 → 1.6.1","bars":[{"name":"Full","v":6.55,"cls":"bar-a","text":"6.55 MiB"},{"name":"CAVS","v":0.14,"cls":"bar-c","text":"0.14 MiB  −97.9%"}]}]}'></div>
+    <div class="table-wrap reveal" style="margin-top:26px;">
+      <table>
+        <thead>
+          <tr><th>Game</th><th>Update</th><th class="num">Full (zstd)</th><th class="num">CAVS (64 KiB)</th><th class="num">Saved</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>godotengine/<strong>tps-demo</strong> (569 MB)</td><td>tag 4.5 → master, 7 files</td><td class="num strike">247.60 MiB</td><td class="num">1.64 MiB</td><td class="num save">−99.3%</td></tr>
+          <tr><td>MechanicalFlower/<strong>Marble</strong></td><td>1.6.0 → 1.6.1</td><td class="num strike">6.55 MiB</td><td class="num">0.14 MiB</td><td class="num save">−97.9%</td></tr>
+          <tr><td>GDQuest <strong>3D third-person</strong></td><td>HEAD~10 → HEAD, 468 files</td><td class="num strike">27.61 MiB</td><td class="num">8.70 MiB</td><td class="num save">−68.5%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">Re-downloading the same version costs <strong style="color:var(--green)">0 bytes</strong> of payload — everything resolves from the persistent cache as references. All reconstructions were SHA-256 verified and byte-identical; the Godot runtime mounted the reconstructed PCKs via <span class="mono">load_resource_pack()</span>.</p>
+  </div>
+</section>
+
+<!-- ============ COLD INSTALL ============ -->
+<section class="anchor" id="cold">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The dual route</span>
+      <h2 class="section-title">Cold install is never worse<br>than a full compressed download.</h2>
+      <p class="section-sub"><span class="mono">cavs pack --bootstrap</span> also emits the full artifact zstd-19-compressed. The server offers it to cold clients whenever it beats the chunk path, and the client seeds its chunk cache from it — so the next update is incremental with zero extra download. When the payload is incompressible, the server keeps the chunk path.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead>
+          <tr><th>Game</th><th class="num">PCK v1</th><th class="num">Full zstd-3</th><th class="num">Dual route cold</th><th class="num">vs zstd-3</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>godotengine/tps-demo</td><td class="num">569.15 MiB</td><td class="num strike">247.62 MiB</td><td class="num">221.42 MiB</td><td class="num save">−10.6%</td></tr>
+          <tr><td>GDQuest 3D third-person</td><td class="num">61.09 MiB</td><td class="num strike">27.66 MiB</td><td class="num">24.43 MiB</td><td class="num save">−11.7%</td></tr>
+          <tr><td>MechanicalFlower/Marble</td><td class="num">9.59 MiB</td><td class="num strike">6.55 MiB</td><td class="num">5.68 MiB</td><td class="num save">−13.2%</td></tr>
+          <tr><td>Godot 4.7 export suite</td><td class="num">5.39 MiB</td><td class="num strike">4.52 MiB</td><td class="num">4.20 MiB</td><td class="num save">−7.1%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">The server routed all four games to the bootstrap automatically (per-session estimate vs threshold); every reconstruction was byte-identical.</p>
+  </div>
+</section>
+
+<!-- ============ MANIFEST ============ -->
+<section class="anchor" id="manifest">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Update-check cost</span>
+      <h2 class="section-title">Compact binary manifests.</h2>
+      <p class="section-sub">When payload is already cached, the manifest becomes the cost of checking for updates — the "is there an update?" call every launcher makes. The binary manifest (<span class="mono">CAVSMF2</span>) stores each unique chunk hash once and references it by varint index.</p>
+    </div>
+    <div class="cards g2">
+      <div class="chart reveal" data-chart='{"title":"Manifest size — JSON vs binary v2","subtitle":"KiB on the wire, lower is better","legend":[{"name":"JSON v1","cls":"bar-a"},{"name":"Binary v2","cls":"bar-b"}],"groups":[{"label":"tps-demo","bars":[{"name":"JSON","v":894.2,"cls":"bar-a","text":"894.2 KiB"},{"name":"Binary","v":208.5,"cls":"bar-b","text":"208.5 KiB  −76.7%"}]},{"label":"GDQuest","bars":[{"name":"JSON","v":103.1,"cls":"bar-a","text":"103.1 KiB"},{"name":"Binary","v":24.8,"cls":"bar-b","text":"24.8 KiB  −75.9%"}]},{"label":"Marble","bars":[{"name":"JSON","v":20.3,"cls":"bar-a","text":"20.3 KiB"},{"name":"Binary","v":5.1,"cls":"bar-b","text":"5.1 KiB  −75.0%"}]}]}'></div>
+      <div class="reveal" style="align-self:center">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Game</th><th class="num">JSON v1</th><th class="num">Binary v2</th><th class="num">Parse</th></tr></thead>
+            <tbody>
+              <tr><td>tps-demo</td><td class="num strike">894.2 KiB</td><td class="num">208.5 KiB</td><td class="num">0.53 → 0.49 ms</td></tr>
+              <tr><td>GDQuest</td><td class="num strike">103.1 KiB</td><td class="num">24.8 KiB</td><td class="num">0.062 → 0.058 ms</td></tr>
+              <tr><td>Marble</td><td class="num strike">20.3 KiB</td><td class="num">5.1 KiB</td><td class="num">0.018 → 0.017 ms</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="table-note">Chunk-path bytes are unchanged; the win lands where metadata dominates — a warm re-fetch now costs ~75% less wire.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VS DELTA TOOLS ============ -->
+<section class="anchor" id="delta">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Positioning</span>
+      <h2 class="section-title">CAVS vs dedicated delta tools.</h2>
+      <p class="section-sub">Per-pair delta tools win on raw bytes for one exact version pair — that is inherent and expected. The point is the operational model: CAVS packages once per release and serves any version jump from one deduplicated, CDN-cacheable store, with resumable, self-repairing delivery.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead>
+          <tr><th>Game (v1→v2)</th><th class="num">zstd full</th><th class="num">rsync wire</th><th class="num">xdelta3 -9</th><th class="num">bsdiff</th><th class="num">CAVS (64k)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>tps-demo</td><td class="num">247.60</td><td class="num">462.95</td><td class="num">0.03</td><td class="num">0.03</td><td class="num blue">1.64</td></tr>
+          <tr><td>GDQuest</td><td class="num">27.61</td><td class="num">54.86</td><td class="num">3.78</td><td class="num">3.82</td><td class="num blue">8.70</td></tr>
+          <tr><td>Marble</td><td class="num">6.55</td><td class="num">0.02</td><td class="num">0.00</td><td class="num">0.00</td><td class="num blue">0.14</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="bullets" style="margin-top:22px;">
+      <li><strong>rsync loses on large binaries with scattered changes</strong>: on tps-demo it transmitted 462.95&nbsp;MiB — worse than downloading the whole thing.</li>
+      <li><strong>xdelta3 / bsdiff produce the smallest single-pair patches</strong> — but you need one patch per version pair (O(N²)), and building the bsdiff patch for tps-demo cost <span class="mono">137&nbsp;s and 9.1&nbsp;GB of RAM</span>.</li>
+      <li><strong>CAVS packs once per release (3.5&nbsp;s)</strong> and the same chunk store serves any version jump, with resumable, CDN-cacheable, cross-version reuse.</li>
+    </ul>
+    <div class="callout blue">
+      On tps-demo, <span class="big">bsdiff cost 137 s and 9.1 GB RAM</span> to build one patch — while CAVS packed once in <span class="big">3.5 s</span>, reusable across every client and version jump.
+    </div>
+  </div>
+</section>
+
+<!-- ============ MULTI-ROUTE ============ -->
+<section class="anchor" id="routes">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Auto-route optimized delivery</span>
+      <h2 class="section-title">Every route for one update, measured.</h2>
+      <p class="section-sub">The delivery planner prices chunks, hybrid reconstruction, offline plans, optimized sidecars, bootstrap, full download and no-op against client state, memory budget and measured cost. Below is the full external pipeline on the same 126&nbsp;MiB directory release — butler's default <span class="mono">diff</span> and optimized <span class="mono">rediff --rediff-quality 9</span>, plus byte-level proxies. Every output byte-identical; RSS via <span class="mono">/usr/bin/time</span> on real binaries.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead>
+          <tr><th>Route</th><th class="num">Download</th><th class="num">Generate</th><th class="num">Apply</th><th class="num">Peak RAM</th></tr>
+        </thead>
+        <tbody>
+          <tr class="hl-row"><td><strong class="blue">CAVS auto-route (plan)</strong></td><td class="num blue">2.51 MiB</td><td class="num blue">0.54 s</td><td class="num">391 ms</td><td class="num blue">23 MiB</td></tr>
+          <tr><td>butler diff (default)</td><td class="num">2.52 MiB</td><td class="num">1.0 s</td><td class="num">331 ms</td><td class="num">35 MiB</td></tr>
+          <tr><td>butler rediff q9 (optimized)</td><td class="num">2.51 MiB</td><td class="num">11.6 s</td><td class="num">403 ms</td><td class="num">97 MiB</td></tr>
+          <tr><td>pairwise proxy — xdelta3 + zstd-19</td><td class="num">3.01 MiB</td><td class="num">4.1 s</td><td class="num">3.4 s</td><td class="num">397 MiB</td></tr>
+          <tr><td>pairwise proxy — bsdiff + zstd-19</td><td class="num">3.02 MiB</td><td class="num">25.0 s</td><td class="num">3.4 s</td><td class="num">2.3 GiB</td></tr>
+          <tr><td>full download (zstd-19)</td><td class="num strike">62.12 MiB</td><td class="num">3.9 s</td><td class="num">14 ms</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="chart reveal" style="margin-top:26px;" data-chart='{"title":"Peak apply memory across routes","subtitle":"MiB, lower is better — same 126 MiB directory update","legend":[{"name":"CAVS","cls":"bar-c"},{"name":"others","cls":"bar-a"}],"groups":[{"label":"Peak RAM to apply the update","bars":[{"name":"CAVS plan","v":23,"cls":"bar-c","text":"23 MiB"},{"name":"butler default","v":35,"cls":"bar-a","text":"35 MiB"},{"name":"butler q9","v":97,"cls":"bar-a","text":"97 MiB"},{"name":"xdelta3 proxy","v":397,"cls":"bar-a","text":"397 MiB"},{"name":"bsdiff proxy","v":2355,"cls":"bar-a","text":"2.3 GiB"}]}]}'></div>
+    <div class="callout">
+      Bytes and apply time tie the optimized patch, but CAVS generates <span class="big">21× faster</span> and applies with <span class="big">4.2× less memory</span> (23 vs 97 MiB). On a shifted artifact (every byte moved) CAVS ships <span class="big">4.21 KiB</span> vs the optimized patch's 11.39 KiB — smaller, faster to apply, and a fraction of the RAM.
+    </div>
+
+    <h3 style="font-size:20px; margin:56px 0 16px;">Single artifact &amp; the compressed-blob case</h3>
+    <div class="table-wrap reveal">
+      <table>
+        <thead>
+          <tr><th>Change (128 MiB artifact)</th><th class="num">full zstd-19</th><th class="num">CAVS plan</th><th class="num">butler optimized</th><th class="num">bsdiff proxy</th><th class="num">xdelta3 proxy</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>small change (~3%)</td><td class="num strike">64.05 MiB</td><td class="num blue">1.94 MiB</td><td class="num">1.94 MiB</td><td class="num">1.96 MiB</td><td class="num">1.94 MiB</td></tr>
+          <tr><td>shifted (every byte moves)</td><td class="num strike">64.06 MiB</td><td class="num blue">4.21 KiB</td><td class="num">11.39 KiB</td><td class="num">4.59 KiB</td><td class="num">4.34 KiB</td></tr>
+          <tr><td>compressed blob (62 MiB .tar.zst)</td><td class="num strike">—</td><td class="num blue">2.53 MiB</td><td class="num">2.90 MiB</td><td class="num">—</td><td class="num">2.53 MiB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">On the shifted artifact CAVS's content-defined blocks survive the unaligned insert and beat butler's fixed-block scan <strong>16×</strong>. The compressed-blob weak case is closed: the per-file optimizer routes the high-entropy blob through a byte-level delta — 2.53&nbsp;MiB where naïve block routes paid 21.9&nbsp;MiB.</p>
+  </div>
+</section>
+
+<!-- ============ HYBRID ============ -->
+<section class="anchor" id="hybrid">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Reuse the installed build</span>
+      <h2 class="section-title">The version on disk<br>is a source of bytes.</h2>
+      <p class="section-sub">A player with the old build installed but an empty cache copies verified ranges straight from the old file and fetches only what changed — every range BLAKE3-checked before it is written, the final output gated by SHA-256. Measured on a 128&nbsp;MiB synthetic build against a full re-download.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead>
+          <tr><th>Update variant</th><th class="num">Full re-download</th><th class="num">CAVS — cold cache + old install</th><th class="num">Reduction</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>small change</td><td class="num strike">64.55 MiB</td><td class="num">6.24 MiB</td><td class="num save">−90.3%</td></tr>
+          <tr><td>medium change</td><td class="num strike">64.56 MiB</td><td class="num">26.53 MiB</td><td class="num save">−58.9%</td></tr>
+          <tr><td>shifted (every byte moves)</td><td class="num strike">64.56 MiB</td><td class="num blue">10.9 KiB</td><td class="num save">−99.98%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="cards g4" style="margin-top:26px;">
+      <div class="card reveal"><span class="idx">// previous artifact</span><h3>Reuse the old install</h3><p>Point the client at <span class="mono">--previous-artifact</span>. Shared ranges are copied from disk, not the network — no chunk cache required.</p></div>
+      <div class="card reveal" style="transition-delay:.05s"><span class="idx">// signatures</span><h3>Compact .cavssig</h3><p>A deterministic old-version signature — 88&nbsp;KiB for a 128&nbsp;MiB build (~0.07%) — lets a new version be diffed without the old bytes.</p></div>
+      <div class="card reveal" style="transition-delay:.1s"><span class="idx">// no-op</span><h3>Skip unchanged work</h3><p>An output that already matches costs <strong>0 payload bytes</strong>. In directory mode, unchanged files — including player mods — are never rewritten.</p></div>
+      <div class="card reveal" style="transition-delay:.15s"><span class="idx">// coalescing</span><h3>Fewer, larger reads</h3><p>Adjacent copy ranges merge: on the shifted build, <strong>1,082 chunk ops → 18</strong> contiguous reads, read amplification 1.0.</p></div>
+    </div>
+    <div class="callout">
+      A corrupt old install demotes exactly the affected range to the network (<span class="mono">CAVS-E-PREVIOUS-ARTIFACT-MISMATCH</span>) and still ends <span class="big">byte-identical</span>.
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCALE ============ -->
+<section class="anchor" id="scale">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Scale — 1 GiB suite</span>
+      <h2 class="section-title">FastCDC handles shifted<br>and reordered builds.</h2>
+      <p class="section-sub">A deterministic 1&nbsp;GiB benchmark suite (same seed ⇒ identical bytes on any machine) tests the update shapes that matter for chunked delivery. FastCDC 64&nbsp;KiB + zstd 3.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead>
+          <tr><th>Update shape</th><th>Changed</th><th class="num">Pack time</th><th class="num">Update egress</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Small change</td><td>~3% of blocks</td><td class="num">6.4 s</td><td class="num">51.3 MiB</td></tr>
+          <tr><td>Medium change</td><td>~15%</td><td class="num">6.8 s</td><td class="num">216.6 MiB</td></tr>
+          <tr><td>Large change</td><td>~50%</td><td class="num">6.8 s</td><td class="num">449.1 MiB</td></tr>
+          <tr><td>Head-shifted</td><td>4 KiB inserted at head — every byte shifts</td><td class="num">7.3 s</td><td class="num blue">10.9 KiB</td></tr>
+          <tr><td>Reordered</td><td>Same blocks, 8 MiB groups swapped</td><td class="num">9.1 s</td><td class="num blue">20.8 MiB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      A 4 KiB insertion at the beginning shifts <em>every byte</em> of a 1 GiB build. Fixed blocks would lose alignment — CAVS FastCDC resynchronizes and sends only <span class="big">10.9 KiB</span>.
+    </div>
+  </div>
+</section>
+
+<!-- ============ STORAGE ============ -->
+<section class="anchor" id="storage">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Operational shape at rest</span>
+      <h2 class="section-title">Store once, serve every jump.</h2>
+      <p class="section-sub">Shared chunks are stored once. Packfile-backed stores collapse thousands of tiny chunk objects into a few immutable <span class="mono">.cavspack</span> files and coalesce nearby chunk reads into a few range reads — a deterministic object tree suitable for S3, R2 or static CDN.</p>
+    </div>
+    <div class="cards g3" style="margin-bottom:32px;">
+      <div class="card reveal"><span class="idx">// dedup at rest</span><h3>Content-addressed dedup</h3><p>Two versions of Marble: <strong>13.80 MiB logical → 7.04 MiB on disk</strong> — roughly <span class="green">49% less storage</span>, shared chunks stored once. GC reclaims unreferenced chunks.</p></div>
+      <div class="card reveal" style="transition-delay:.06s"><span class="idx">// many versions</span><h3>10-version stream</h3><p>Store + 3 policy-chosen hot-pair sidecars = <strong>35.91 MiB</strong> serving any jump, vs 144.23&nbsp;MiB for all 45 pair patches — <span class="green">75% less</span>, no O(N²).</p></div>
+      <div class="card reveal" style="transition-delay:.12s"><span class="idx">// CDN export</span><h3>Deterministic object tree</h3><p><span class="mono">store export</span> emits a stable object tree for static CDN hosting — same wire bytes as loose storage, far fewer objects to host.</p></div>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead>
+          <tr><th>Game</th><th class="num">Chunk objects on disk</th><th class="num">Physical reads (whole session)</th><th class="num">Read amplification</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>MechanicalFlower/Marble</td><td class="num">130 → <strong class="blue">4</strong></td><td class="num">130 → 2 (65×)</td><td class="num save">1.000</td></tr>
+          <tr><td>GDQuest 3D third-person</td><td class="num">807 → <strong class="blue">4</strong></td><td class="num">805 → 7 (115×)</td><td class="num save">1.000</td></tr>
+          <tr><td>godotengine/tps-demo</td><td class="num">5,775 → <strong class="blue">6</strong></td><td class="num">5,775 → 34 (170×)</td><td class="num save">1.000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">Amplification 1.000 means coalescing read <strong>zero</strong> extra bytes: chunks are written in reconstruction order, so merged ranges are exactly contiguous.</p>
+  </div>
+</section>
+
+<!-- ============ CLIENT COST ============ -->
+<section class="anchor" id="client">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Client cost</span>
+      <h2 class="section-title">Constant memory, whatever the size.</h2>
+      <p class="section-sub">The client reconstructs by streaming to disk — batch-decoded from the socket → disk cache → <span class="mono">.part</span> → SHA-256 → atomic rename — so RAM stays flat regardless of game size. Measured on the tps-demo update (569 MB game, release binaries).</p>
+    </div>
+    <div class="proof reveal">
+      <div class="proof-card"><div class="num blue">7 MiB</div><div class="label">Peak client RAM</div><div class="desc">update, streamed to disk</div></div>
+      <div class="proof-card"><div class="num blue">14.3 MiB</div><div class="label">Peak RAM</div><div class="desc">cold bootstrap install</div></div>
+      <div class="proof-card"><div class="num green">2.0 s</div><div class="label">Update CPU</div><div class="desc">reconstruct + verify</div></div>
+      <div class="proof-card"><div class="num green">3.5 s</div><div class="label">Pack whole release</div><div class="desc">once per version</div></div>
+    </div>
+    <p class="table-note" style="margin-top:22px;">Resilience is measured too: an install killed with <span class="mono">kill -9</span> at 57&nbsp;MiB resumed with an HTTP Range request and downloaded only the remaining 166.5&nbsp;MiB; a cache with 3 corrupted chunks (of 5,747) detected, quarantined and re-fetched exactly those 3, then returned to 0-byte re-fetches. A ~20-case corruption matrix and 5 libFuzzer targets leave zero unauthenticated-content survivors.</p>
+  </div>
+</section>
+
+<!-- ============ NEGATIVES ============ -->
+<section class="anchor" id="negatives">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow amber">Honest negatives</span>
+      <h2 class="section-title">Where CAVS saves nothing.</h2>
+      <p class="section-sub">CAVS is not a codec and does not pretend to be. It is most valuable when redundancy crosses versions, releases, bundles or repeated assets.</p>
+    </div>
+    <ul class="bullets warn">
+      <li><strong>Single video, first play</strong>: ~0% savings, packaging overhead +0.03%.</li>
+      <li><strong>ABR ladder</strong> (same title, multiple bitrates): ~0% cross-bitrate dedup — different bitstreams share no bytes.</li>
+      <li><strong>Already-compressed files</strong> (JPEG, MP4, ZIP): overhead +0.08%, near-zero savings — the classifier detects these and packs them with large fixed chunks so overhead stays minimal.</li>
+      <li><strong>Pairwise delta tools</strong> can be smaller for one exact version pair.</li>
+    </ul>
+    <div class="callout blue" style="margin-top:28px;">
+      Where redundancy <em>does</em> cross content (shared episode intros): 7–21% storage savings by codec; warm re-watch −100% egress. CAVS is strongest for <span class="big">game updates, engine packs, launchers, DLC, binary assets and version streams</span>.
+    </div>
+  </div>
+</section>
+
+<!-- ============ REPRODUCE ============ -->
+<section class="anchor" id="reproduce" style="padding-top:20px;">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Reproducing</span>
+      <h2 class="section-title">Run the suite yourself.</h2>
+      <p class="section-sub">The synthetic large-build suite is fully reproducible from the source tree — a deterministic PRNG regenerates the exact same dataset on any machine and writes <span class="mono">summary.md</span> / <span class="mono">summary.json</span>.</p>
+    </div>
+    <pre class="code"><span class="prompt">$</span> cavs bench gen <span class="flag">--out</span> ds <span class="flag">--size</span> 1GiB
+<span class="prompt">$</span> cavs bench suite <span class="flag">--dataset</span> ds <span class="flag">--out</span> results
+<span class="comment"># → results/summary.md, results/summary.json</span></pre>
+    <p class="table-note">The real-game harnesses and their raw result data live in the full development repository; the measured summaries above are what those harnesses produced. Full write-ups: <span class="mono">docs/BENCHMARKS.md</span>, <span class="mono">docs/ROUTE_BENCHMARKS.md</span>, <span class="mono">docs/results/v0.8.0/</span>.</p>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a href="index.html" class="brand" style="font-size:18px;"><img src="assets/logo-transparent-128.png" alt="" style="width:26px;height:26px;" /> CAVS</a>
+        <p class="foot-note">Content-Addressable Verified Streaming.<br>Ship game updates that weigh what changed.</p>
+      </div>
+      <div class="foot-links">
+        <a href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">GitHub</a>
+        <a href="index.html">Home</a>
+        <a href="products.html">Products</a>
+        <a href="changelog.html">Changelog</a>
+      </div>
+    </div>
+    <p class="foot-note" style="margin-top:32px; opacity:.75;">© 2026 CAVS · Apache 2.0 licensed · Benchmarks measured on real Godot PCKs over real HTTP sessions.</p>
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+<script src="assets/charts.js"></script>
+</body>
+</html>

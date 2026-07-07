@@ -6,8 +6,8 @@
 <title>CAVS — Content-addressed delivery for game updates</title>
 <meta name="description" content="CAVS reduces game update payloads by reusing content-addressed chunks across versions. Benchmarked on real Godot PCKs: 68–99% smaller updates, 0-byte warm re-fetch, byte-identical reconstruction." />
 <meta name="author" content="Orelvis" />
+<meta name="theme-color" content="#0A0E1A" />
 
-<!-- Open Graph -->
 <meta property="og:type" content="website" />
 <meta property="og:title" content="CAVS: Ship smaller game updates" />
 <meta property="og:description" content="Content-addressed delivery for game builds, Godot PCKs and asset bundles. Download only the bytes players are missing." />
@@ -16,449 +16,12 @@
 <meta name="twitter:title" content="CAVS: Ship smaller game updates" />
 <meta name="twitter:description" content="Download only the bytes your players are missing. Benchmarked on real Godot PCKs." />
 
-<link rel="icon" type="image/png" href="assets/logo.png" />
-
-<!-- Fonts -->
+<link rel="icon" type="image/png" href="assets/logo-transparent-128.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-
-<style>
-  :root {
-    --bg:        #0A0E1A;
-    --bg-2:      #0B1020;
-    --card:      #111827;
-    --card-2:    #0F1626;
-    --border:    #1E293B;
-    --border-2:  #273449;
-    --text:      #E5E7EB;
-    --muted:     #94A3B8;
-    --dim:       #64748B;
-    --green:     #22C55E;
-    --green-dim: #16A34A;
-    --blue:      #38BDF8;
-    --blue-2:    #2563EB;
-    --amber:     #F59E0B;
-    --red:       #F87171;
-
-    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
-    --display: "Bricolage Grotesque", var(--sans);
-
-    --maxw: 1180px;
-    --radius: 14px;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 17px;
-    line-height: 1.65;
-    -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
-    position: relative;
-  }
-
-  /* ---------- Ambient background ---------- */
-  .bg-fx {
-    position: fixed;
-    inset: 0;
-    z-index: -2;
-    background:
-      radial-gradient(900px 500px at 78% -6%, rgba(56,189,248,0.14), transparent 60%),
-      radial-gradient(760px 480px at 10% 4%, rgba(37,99,235,0.12), transparent 55%),
-      radial-gradient(1000px 700px at 50% 110%, rgba(34,197,94,0.07), transparent 60%),
-      var(--bg);
-  }
-  .bg-grid {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    background-image:
-      linear-gradient(rgba(148,163,184,0.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148,163,184,0.045) 1px, transparent 1px);
-    background-size: 56px 56px;
-    mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 30%, transparent 78%);
-    -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 30%, transparent 78%);
-  }
-
-  ::selection { background: rgba(56,189,248,0.28); color: #fff; }
-
-  a { color: inherit; text-decoration: none; }
-
-  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
-
-  /* ---------- Typography ---------- */
-  h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.08; letter-spacing: -0.02em; }
-  .eyebrow {
-    font-family: var(--mono);
-    font-size: 12.5px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--blue);
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    margin-bottom: 18px;
-  }
-  .eyebrow::before {
-    content: "";
-    width: 22px; height: 1px;
-    background: linear-gradient(90deg, var(--blue), transparent);
-  }
-  .mono { font-family: var(--mono); }
-  .green { color: var(--green); }
-  .blue  { color: var(--blue); }
-  .amber { color: var(--amber); }
-
-  /* ---------- Nav ---------- */
-  header.nav {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    background: rgba(10,14,26,0.72);
-    border-bottom: 1px solid transparent;
-    transition: border-color .3s, background .3s;
-  }
-  header.nav.scrolled { border-bottom-color: var(--border); background: rgba(10,14,26,0.88); }
-  .nav-inner {
-    max-width: var(--maxw);
-    margin: 0 auto;
-    padding: 14px 24px;
-    display: flex;
-    align-items: center;
-    gap: 28px;
-  }
-  .brand { display: flex; align-items: center; gap: 11px; font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; }
-  .brand img { width: 30px; height: 30px; display: block; }
-  .brand span.tag { font-family: var(--mono); font-weight: 500; font-size: 11px; color: var(--dim); border: 1px solid var(--border-2); border-radius: 6px; padding: 2px 7px; letter-spacing: 0.04em; }
-  .nav-links { display: flex; gap: 26px; margin-left: auto; align-items: center; }
-  .nav-links a { font-size: 14.5px; color: var(--muted); transition: color .2s; }
-  .nav-links a:hover { color: var(--text); }
-
-  /* ---------- Buttons ---------- */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    font-family: var(--sans);
-    font-weight: 600;
-    font-size: 15px;
-    padding: 12px 20px;
-    border-radius: 10px;
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: transform .15s ease, box-shadow .2s, background .2s, border-color .2s;
-    white-space: nowrap;
-  }
-  .btn svg { width: 17px; height: 17px; }
-  .btn-primary {
-    background: linear-gradient(180deg, var(--blue), var(--blue-2));
-    color: #04121f;
-    box-shadow: 0 6px 22px -8px rgba(56,189,248,0.6), inset 0 1px 0 rgba(255,255,255,0.25);
-  }
-  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -8px rgba(56,189,248,0.7), inset 0 1px 0 rgba(255,255,255,0.25); }
-  .btn-ghost {
-    background: rgba(255,255,255,0.02);
-    border-color: var(--border-2);
-    color: var(--text);
-  }
-  .btn-ghost:hover { border-color: var(--blue); background: rgba(56,189,248,0.07); transform: translateY(-2px); }
-  .btn-sm { padding: 8px 15px; font-size: 13.5px; }
-
-  /* ---------- Sections ---------- */
-  section { padding: 92px 0; position: relative; }
-  .section-head { max-width: 720px; margin-bottom: 48px; }
-  .section-head.center { margin-left: auto; margin-right: auto; text-align: center; }
-  .section-head.center .eyebrow { justify-content: center; }
-  .section-head.center .eyebrow::before { display: none; }
-  h2.section-title { font-size: clamp(30px, 4.5vw, 46px); font-weight: 700; }
-  .section-sub { color: var(--muted); font-size: 18px; margin-top: 16px; }
-
-  /* ---------- Hero ---------- */
-  .hero { padding-top: 76px; padding-bottom: 64px; }
-  .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 54px; align-items: center; }
-  .hero h1 { font-size: clamp(38px, 5.6vw, 66px); font-weight: 800; }
-  .hero h1 .accent {
-    background: linear-gradient(115deg, var(--blue) 20%, var(--green) 95%);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  .hero-sub { color: var(--muted); font-size: 19px; margin-top: 24px; max-width: 560px; }
-  .hero-cta { display: flex; gap: 14px; margin-top: 34px; flex-wrap: wrap; }
-  .trust {
-    margin-top: 30px;
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--dim);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 18px;
-    align-items: center;
-  }
-  .trust span { display: inline-flex; align-items: center; gap: 7px; }
-  .trust .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
-
-  /* ---------- Terminal card ---------- */
-  .term {
-    background: linear-gradient(180deg, #0d1424, #0a1020);
-    border: 1px solid var(--border-2);
-    border-radius: var(--radius);
-    box-shadow: 0 40px 80px -30px rgba(0,0,0,0.8), 0 0 0 1px rgba(56,189,248,0.06);
-    overflow: hidden;
-    font-family: var(--mono);
-    position: relative;
-  }
-  .term::after {
-    content: "";
-    position: absolute; inset: 0;
-    border-radius: var(--radius);
-    pointer-events: none;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-  }
-  .term-bar {
-    display: flex; align-items: center; gap: 8px;
-    padding: 12px 15px;
-    border-bottom: 1px solid var(--border);
-    background: rgba(255,255,255,0.015);
-  }
-  .term-bar .dots { display: flex; gap: 7px; }
-  .term-bar .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
-  .term-bar .dots i:nth-child(1){ background:#ff5f57; }
-  .term-bar .dots i:nth-child(2){ background:#febc2e; }
-  .term-bar .dots i:nth-child(3){ background:#28c840; }
-  .term-bar .title { margin-left: 8px; font-size: 12px; color: var(--dim); }
-  .term-copy { margin-left: auto; font-size: 11px; color: var(--dim); cursor: pointer; border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; transition: .2s; }
-  .term-copy:hover { color: var(--blue); border-color: var(--blue); }
-  .term-body { padding: 20px 20px 22px; font-size: 13.5px; line-height: 1.9; overflow-x: auto; }
-  .term-body .cmd { color: #d6e4f0; white-space: pre; }
-  .term-body .prompt { color: var(--green); }
-  .term-body .flag { color: var(--blue); }
-  .term-body .str { color: #fcd34d; }
-  .term-body .comment { color: var(--dim); }
-  .term-out {
-    margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-2);
-    display: grid; grid-template-columns: auto 1fr; gap: 3px 18px; font-size: 13px;
-  }
-  .term-out .k { color: var(--muted); }
-  .term-out .v { text-align: right; color: var(--text); }
-  .term-out .v.big { color: var(--green); font-weight: 600; }
-  .term-out .v.strike { color: var(--dim); }
-
-  /* ---------- Proof bar ---------- */
-  .proof { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-  .proof-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 26px 22px;
-    position: relative;
-    overflow: hidden;
-    transition: transform .2s, border-color .2s;
-  }
-  .proof-card:hover { transform: translateY(-3px); border-color: var(--border-2); }
-  .proof-card::before {
-    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-    background: linear-gradient(90deg, var(--blue), transparent);
-  }
-  .proof-card .num { font-family: var(--display); font-size: clamp(30px, 3.6vw, 42px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
-  .proof-card .num.green { color: var(--green); }
-  .proof-card .num.blue { color: var(--blue); }
-  .proof-card .label { margin-top: 12px; font-weight: 600; font-size: 14.5px; }
-  .proof-card .desc { margin-top: 5px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
-
-  /* ---------- generic card grid ---------- */
-  .cards { display: grid; gap: 18px; }
-  .g2 { grid-template-columns: repeat(2, 1fr); }
-  .g3 { grid-template-columns: repeat(3, 1fr); }
-  .g4 { grid-template-columns: repeat(4, 1fr); }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 26px;
-    transition: transform .2s, border-color .2s, background .2s;
-  }
-  .card:hover { border-color: var(--border-2); }
-  .card h3 { font-size: 19px; margin-bottom: 10px; }
-  .card p { color: var(--muted); font-size: 15px; }
-  .card .idx { font-family: var(--mono); font-size: 12px; color: var(--blue); margin-bottom: 14px; display: block; }
-
-  .lead { color: var(--muted); font-size: 17px; max-width: 760px; }
-  .lead + .lead { margin-top: 16px; }
-
-  ul.bullets { list-style: none; margin-top: 22px; display: grid; gap: 12px; max-width: 720px; }
-  ul.bullets li { position: relative; padding-left: 30px; color: var(--muted); }
-  ul.bullets li::before {
-    content: ""; position: absolute; left: 4px; top: 10px;
-    width: 8px; height: 8px; border-radius: 2px; transform: rotate(45deg);
-    background: var(--blue);
-  }
-  ul.bullets.warn li::before { background: var(--amber); }
-
-  /* ---------- Tables ---------- */
-  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card-2); }
-  table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 560px; }
-  thead th {
-    text-align: left; font-family: var(--mono); font-weight: 500; font-size: 12px;
-    text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim);
-    padding: 15px 18px; border-bottom: 1px solid var(--border-2); background: rgba(255,255,255,0.015);
-  }
-  tbody td { padding: 15px 18px; border-bottom: 1px solid var(--border); }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover td { background: rgba(56,189,248,0.03); }
-  td.num, th.num { text-align: right; font-family: var(--mono); }
-  .save { font-family: var(--mono); font-weight: 600; color: var(--green); }
-  .strike { color: var(--dim); text-decoration: line-through; }
-  .table-note { font-size: 13.5px; color: var(--dim); margin-top: 14px; font-family: var(--mono); }
-
-  /* ---------- Steps ---------- */
-  .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; counter-reset: step; }
-  .step {
-    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 24px 20px; position: relative;
-  }
-  .step .n {
-    font-family: var(--mono); font-size: 12px; color: var(--blue);
-    border: 1px solid var(--border-2); border-radius: 8px; width: 34px; height: 34px;
-    display: grid; place-items: center; margin-bottom: 16px; font-weight: 600;
-  }
-  .step h3 { font-size: 16px; margin-bottom: 8px; }
-  .step p { color: var(--muted); font-size: 13.5px; }
-
-  /* ---------- callout ---------- */
-  .callout {
-    border-left: 3px solid var(--green);
-    background: linear-gradient(90deg, rgba(34,197,94,0.08), transparent 80%);
-    padding: 24px 28px; border-radius: 0 var(--radius) var(--radius) 0;
-    font-size: 18px; line-height: 1.5; margin-top: 28px;
-  }
-  .callout .big { font-family: var(--mono); color: var(--green); font-weight: 600; }
-  .callout.blue { border-left-color: var(--blue); background: linear-gradient(90deg, rgba(56,189,248,0.08), transparent 80%); }
-  .callout.blue .big { color: var(--blue); }
-
-  /* code block */
-  pre.code {
-    background: #0a1020; border: 1px solid var(--border-2); border-radius: var(--radius);
-    padding: 22px; overflow-x: auto; font-family: var(--mono); font-size: 13.5px; line-height: 1.85;
-    color: #d6e4f0; position: relative;
-  }
-  pre.code .prompt { color: var(--green); }
-  pre.code .flag { color: var(--blue); }
-  pre.code .comment { color: var(--dim); }
-  pre.code .str { color: #fcd34d; }
-
-  /* ---------- Architecture diagram ---------- */
-  .arch { display:flex; flex-direction: column; align-items:center; gap: 0; }
-  .arch .node {
-    background: var(--card); border: 1px solid var(--border-2); border-radius: 10px;
-    padding: 14px 22px; text-align: center; font-family: var(--mono); font-size: 13.5px;
-    min-width: 180px; position: relative;
-  }
-  .arch .node .sub { color: var(--dim); font-size: 11.5px; display:block; margin-top:2px; }
-  .arch .node.accent { border-color: var(--blue); box-shadow: 0 0 24px -8px rgba(56,189,248,0.4); }
-  .arch .node.final { border-color: var(--green); box-shadow: 0 0 24px -8px rgba(34,197,94,0.4); }
-  .arch .connector { width: 2px; height: 26px; background: linear-gradient(var(--border-2), var(--blue)); }
-  .arch .fork { display:flex; gap: 16px; justify-content:center; flex-wrap: wrap; }
-
-  /* ---------- FAQ ---------- */
-  .faq-item { border-bottom: 1px solid var(--border); }
-  .faq-q {
-    width: 100%; text-align: left; background: none; border: none; color: var(--text);
-    font-family: var(--display); font-weight: 600; font-size: 19px; cursor: pointer;
-    padding: 24px 44px 24px 0; position: relative; display: block; letter-spacing: -0.01em;
-  }
-  .faq-q::after {
-    content: "+"; position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-    font-family: var(--mono); font-size: 24px; color: var(--blue); transition: transform .25s; font-weight: 400;
-  }
-  .faq-item.open .faq-q::after { transform: translateY(-50%) rotate(45deg); }
-  .faq-a { max-height: 0; overflow: hidden; transition: max-height .3s ease; }
-  .faq-a p { color: var(--muted); font-size: 15.5px; padding-bottom: 24px; padding-right: 44px; }
-  .faq-item.open .faq-a { max-height: 340px; }
-
-  /* ---------- Release timeline ---------- */
-  .rel { display:grid; gap: 0; }
-  .rel-row { display:grid; grid-template-columns: 120px 1fr 1.3fr; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--border); align-items:baseline; }
-  .rel-row .ver { font-family: var(--mono); color: var(--blue); font-weight: 600; font-size: 15px; }
-  .rel-row .focus { font-weight: 600; font-family: var(--display); }
-  .rel-row .res { color: var(--muted); font-size: 14.5px; }
-
-  /* ---------- Final CTA ---------- */
-  .cta-final {
-    text-align:center;
-    border: 1px solid var(--border-2);
-    border-radius: 24px;
-    padding: 72px 32px;
-    background:
-      radial-gradient(600px 300px at 50% 0%, rgba(56,189,248,0.14), transparent 65%),
-      linear-gradient(180deg, var(--card), var(--card-2));
-    position: relative; overflow: hidden;
-  }
-  .cta-final h2 { font-size: clamp(30px, 4.5vw, 48px); }
-  .cta-final p { color: var(--muted); max-width: 560px; margin: 18px auto 0; }
-  .cta-final .hero-cta { justify-content: center; }
-  .cta-beta { margin-top: 30px; font-family: var(--mono); font-size: 13.5px; color: var(--dim); }
-
-  /* ---------- Footer ---------- */
-  footer {
-    border-top: 1px solid var(--border);
-    padding: 46px 0 60px;
-    color: var(--dim);
-  }
-  .foot-grid { display:flex; justify-content: space-between; align-items:flex-start; gap: 32px; flex-wrap: wrap; }
-  .foot-links { display:flex; gap: 26px; flex-wrap: wrap; font-size: 14px; }
-  .foot-links a { color: var(--muted); transition: color .2s; }
-  .foot-links a:hover { color: var(--blue); }
-  .foot-note { font-size: 13px; margin-top: 22px; font-family: var(--mono); }
-
-  .divider-label {
-    text-align:center; font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em;
-    text-transform: uppercase; color: var(--dim); margin: 8px 0 40px;
-  }
-
-  /* tabs for compare */
-  .tag-pill { display:inline-block; font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 6px; border:1px solid var(--border-2); color: var(--muted); margin-right:6px; }
-
-  /* reveal animation */
-  .reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s ease; }
-  .reveal.in { opacity: 1; transform: none; }
-
-  /* mobile menu */
-  .burger { display:none; margin-left:auto; background:none; border:1px solid var(--border-2); border-radius:8px; padding:8px 10px; cursor:pointer; }
-  .burger svg { width:20px; height:20px; stroke: var(--text); }
-
-  @media (max-width: 900px) {
-    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
-    .proof { grid-template-columns: repeat(2, 1fr); }
-    .steps { grid-template-columns: repeat(2, 1fr); }
-    .g4 { grid-template-columns: repeat(2, 1fr); }
-    .g3 { grid-template-columns: 1fr; }
-    .nav-links { display: none; }
-    .nav-links.open {
-      display: flex; flex-direction: column; position: absolute; top: 100%; left:0; right:0;
-      background: var(--bg-2); border-bottom: 1px solid var(--border); padding: 18px 24px; gap: 16px;
-    }
-    .burger { display: block; }
-    .rel-row { grid-template-columns: 1fr; gap: 6px; }
-  }
-  @media (max-width: 560px) {
-    .proof { grid-template-columns: 1fr 1fr; }
-    .g2 { grid-template-columns: 1fr; }
-    section { padding: 66px 0; }
-    body { font-size: 16px; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .reveal { opacity:1; transform:none; transition:none; }
-    html { scroll-behavior: auto; }
-  }
-</style>
+<link rel="stylesheet" href="assets/styles.css" />
+<script>(function(){try{var t=localStorage.getItem('cavs-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 </head>
 <body>
 <div class="bg-fx"></div>
@@ -467,20 +30,20 @@
 <!-- ============ NAV ============ -->
 <header class="nav" id="nav">
   <div class="nav-inner">
-    <a href="#top" class="brand">
-      <img src="assets/logo.png" alt="CAVS logo" />
+    <a href="index.html" class="brand">
+      <img src="assets/logo-transparent-128.png" alt="CAVS logo" />
       CAVS <span class="tag">v0.8.0</span>
     </a>
     <nav class="nav-links" id="navLinks">
-      <a href="#benchmarks">Benchmarks</a>
-      <a href="#hybrid">Hybrid</a>
-      <a href="#offline">Offline</a>
-      <a href="#planner">Planner</a>
-      <a href="#how">How it works</a>
-      <a href="#compare">Vs. deltas</a>
-      <a href="#quickstart">Quickstart</a>
-      <a href="#faq">FAQ</a>
-      <a class="btn btn-primary btn-sm" href="https://github.com/orelvis15/cavs-oss" target="_blank" rel="noopener">
+      <a class="nav-page active" href="index.html">Home</a>
+      <a class="nav-page" href="benchmarks.html">Benchmarks</a>
+      <a class="nav-page" href="products.html">Products</a>
+      <a class="nav-page" href="changelog.html">Changelog</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle light / dark">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </button>
+      <a class="btn btn-primary btn-sm" href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49l-.01-1.9c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9l-.01 2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
         Star
       </a>
@@ -491,8 +54,6 @@
   </div>
 </header>
 
-<span id="top"></span>
-
 <!-- ============ HERO ============ -->
 <section class="hero">
   <div class="wrap">
@@ -502,28 +63,31 @@
         <h1>Ship game updates<br>without <span class="accent">re-downloading</span><br>the whole build.</h1>
         <p class="hero-sub">CAVS is a content-addressed delivery layer for game builds, Godot PCKs, asset bundles and binary releases. It reconstructs the original file <strong>byte-for-byte</strong> while downloading only the chunks a player is missing.</p>
         <div class="hero-cta">
-          <a class="btn btn-primary" href="https://github.com/orelvis15/cavs-oss" target="_blank" rel="noopener">
+          <a class="btn btn-primary" href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49l-.01-1.9c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9l-.01 2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
             View on GitHub
           </a>
-          <a class="btn btn-ghost" href="#benchmarks">Read benchmarks</a>
+          <a class="btn btn-ghost" href="benchmarks.html">Read benchmarks</a>
         </div>
         <div class="trust">
           <span><i class="dot"></i>Byte-identical reconstruction</span>
           <span><i class="dot"></i>Warm re-fetch: 0 bytes</span>
-          <span><i class="dot"></i>v0.8.0: auto-route optimized delivery</span>
+          <span><i class="dot"></i>Auto-route optimized delivery</span>
         </div>
       </div>
 
       <div class="reveal" style="transition-delay:.12s">
-        <div class="term" id="heroTerm">
+        <div class="term">
           <div class="term-bar">
             <span class="dots"><i></i><i></i><i></i></span>
             <span class="title">bash — cavs delivery</span>
-            <span class="term-copy" id="copyBtn">copy</span>
+            <span class="term-copy" data-copy="cavs pack --raw game_v1.pck --profile auto --bootstrap -o game_v1.cavs
+cavs pack --raw game_v2.pck --profile auto --prev game_v1.cavs -o game_v2.cavs
+cavs-server game_v1.cavs game_v2.cavs
+cavs-client fetch http://localhost:8990 game_v2 --cache ./cache">copy</span>
           </div>
           <div class="term-body">
-<div class="cmd"><span class="comment"># package two real versions of a Godot build</span></div>
+<div class="cmd"><span class="comment"># package two versions of a Godot build</span></div>
 <div class="cmd"><span class="prompt">$</span> cavs pack <span class="flag">--raw</span> game_v1.pck <span class="flag">--profile</span> auto <span class="flag">--bootstrap</span> <span class="flag">-o</span> game_v1.cavs</div>
 <div class="cmd"><span class="prompt">$</span> cavs pack <span class="flag">--raw</span> game_v2.pck <span class="flag">--profile</span> auto <span class="flag">--prev</span> game_v1.cavs <span class="flag">-o</span> game_v2.cavs</div>
 <div class="cmd"> </div>
@@ -557,35 +121,16 @@
         <div class="desc">persistent cache resolves locally</div>
       </div>
       <div class="proof-card reveal" style="transition-delay:.12s">
-        <div class="num blue">−76.7%</div>
-        <div class="label">Manifest overhead</div>
-        <div class="desc">894.2 KiB JSON → 208.5 KiB v2</div>
+        <div class="num blue">7 MiB</div>
+        <div class="label">Peak client RAM</div>
+        <div class="desc">constant, streamed to disk</div>
       </div>
       <div class="proof-card reveal" style="transition-delay:.18s">
-        <div class="num blue">5,775→6</div>
-        <div class="label">Chunk objects → packfiles</div>
-        <div class="desc">CDN-ready immutable storage</div>
+        <div class="num blue">SHA-256</div>
+        <div class="label">Verified output</div>
+        <div class="desc">byte-identical or it fails</div>
       </div>
     </div>
-  </div>
-</section>
-
-<!-- ============ PROBLEM ============ -->
-<section id="problem">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">The problem</span>
-      <h2 class="section-title">Small content changes<br>can become huge downloads.</h2>
-    </div>
-    <p class="lead">Game releases are usually distributed as large binary artifacts: PCKs, bundles, packs, archives or asset containers. When a few assets change, players often still download a large portion of the release again.</p>
-    <p class="lead">Traditional full-file downloads are simple, but waste bandwidth. Pairwise binary deltas can be tiny, but they create operational complexity when you need to support many version jumps, resumable downloads, CDN delivery and persistent cache reuse.</p>
-    <ul class="bullets">
-      <li>Players re-download bytes they already have.</li>
-      <li>Launchers need to support many possible version jumps.</li>
-      <li>CDN / object storage gets expensive with duplicated builds.</li>
-      <li>Pairwise deltas scale poorly across many versions.</li>
-      <li>Corrupt or interrupted downloads need safe recovery.</li>
-    </ul>
   </div>
 </section>
 
@@ -600,6 +145,12 @@
       <div>
         <p class="lead">CAVS packages a release into content-addressed chunks, signs and verifies the manifest, serves only the chunks a client is missing, and reconstructs the original file byte-for-byte on disk.</p>
         <p class="lead">For cold installs, CAVS can use a full <strong>bootstrap</strong> artifact when it is cheaper. The client then seeds its chunk cache from that install, so the next update is incremental — without any extra download.</p>
+        <ul class="bullets check">
+          <li>Package once per release; serve any version jump from one store.</li>
+          <li>Reuse the version already on disk as a local byte source.</li>
+          <li>Resumable downloads and self-repairing caches.</li>
+          <li>Immutable, CDN-cacheable object storage.</li>
+        </ul>
       </div>
       <div class="term">
         <div class="term-bar"><span class="dots"><i></i><i></i><i></i></span><span class="title">delivery flow</span></div>
@@ -617,215 +168,6 @@
   </div>
 </section>
 
-<!-- ============ BENCHMARKS ============ -->
-<section id="benchmarks">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Measured, not projected</span>
-      <h2 class="section-title">Benchmarked on real Godot games.</h2>
-      <p class="section-sub">Benchmarks were captured over real HTTP sessions using open-source Godot projects exported to PCK at two points in their git history.</p>
-    </div>
-
-    <h3 style="font-size:20px; margin-bottom:16px;">Update payloads <span class="tag-pill">the strong case</span></h3>
-    <p class="lead" style="margin-bottom:20px;">A player who already has the previous version downloads only the missing chunks required to reconstruct the new release.</p>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Game</th><th>Update</th><th class="num">Full download</th><th class="num">CAVS update</th><th class="num">Saved</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>godotengine/<strong>tps-demo</strong></td><td>tag 4.5 → master, 7 files</td><td class="num strike">247.60 MiB</td><td class="num">1.64 MiB</td><td class="num save">−99.3%</td></tr>
-          <tr><td>MechanicalFlower/<strong>Marble</strong></td><td>1.6.0 → 1.6.1</td><td class="num strike">6.55 MiB</td><td class="num">0.14 MiB</td><td class="num save">−97.9%</td></tr>
-          <tr><td>GDQuest <strong>3D third-person</strong></td><td>HEAD~10 → HEAD, 468 files</td><td class="num strike">27.61 MiB</td><td class="num">8.70 MiB</td><td class="num save">−68.5%</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="table-note">Re-downloading the same version costs <strong style="color:var(--green)">0 bytes</strong> of payload. All reconstructions were SHA-256 verified and byte-identical.</p>
-
-    <h3 style="font-size:20px; margin:56px 0 16px;">Cold install <span class="tag-pill">the dual route</span></h3>
-    <p class="lead" style="margin-bottom:20px;">CAVS v1's weak spot was first-install overhead. The dual route fixes it: cold clients receive a full zstd-19 bootstrap when that's cheaper than the chunk path, then seed their cache from it for future updates.</p>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Game</th><th class="num">Full zstd-3</th><th class="num">Old chunk cold</th><th class="num">Dual route cold</th><th class="num">Result</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>godotengine/tps-demo</td><td class="num">247.62 MiB</td><td class="num strike">251.91 MiB</td><td class="num">221.42 MiB</td><td class="num save">−10.6%</td></tr>
-          <tr><td>GDQuest 3D third-person</td><td class="num">27.66 MiB</td><td class="num strike">28.20 MiB</td><td class="num">24.43 MiB</td><td class="num save">−11.7%</td></tr>
-          <tr><td>MechanicalFlower/Marble</td><td class="num">6.55 MiB</td><td class="num strike">6.68 MiB</td><td class="num">5.68 MiB</td><td class="num save">−13.2%</td></tr>
-          <tr><td>Godot 4.7 export suite</td><td class="num">4.52 MiB</td><td class="num strike">4.71 MiB</td><td class="num">4.20 MiB</td><td class="num save">−7.1%</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="table-note">Cold install is no longer worse than a full compressed artifact. When bootstrap wins, CAVS uses it automatically. When the payload is incompressible, the server keeps the chunk path.</p>
-
-    <h3 style="font-size:20px; margin:56px 0 16px;">Compact manifests <span class="tag-pill">update-check cost</span></h3>
-    <p class="lead" style="margin-bottom:20px;">When payload is already cached, the manifest becomes the cost of checking for updates. CAVS v0.3.0 introduced a binary manifest (<span class="mono">CAVSMF2</span>) that stores each unique chunk hash once and references it by varint index.</p>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Game</th><th class="num">JSON manifest</th><th class="num">Binary v2</th><th class="num">Saved</th><th class="num">Parse time</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>tps-demo</td><td class="num strike">894.2 KiB</td><td class="num">208.5 KiB</td><td class="num save">−76.7%</td><td class="num">0.53 → 0.49 ms</td></tr>
-          <tr><td>GDQuest</td><td class="num strike">103.1 KiB</td><td class="num">24.8 KiB</td><td class="num save">−75.9%</td><td class="num">0.062 → 0.058 ms</td></tr>
-          <tr><td>Marble</td><td class="num strike">20.3 KiB</td><td class="num">5.1 KiB</td><td class="num save">−75.0%</td><td class="num">0.018 → 0.017 ms</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- ============ HYBRID RECONSTRUCTION (v0.6.0) ============ -->
-<section id="hybrid">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Hybrid reconstruction — v0.6.0</span>
-      <h2 class="section-title">The version already on disk<br>is now a source of bytes.</h2>
-      <p class="section-sub">A player with the old build installed but an empty cache used to pay the full download. In v0.6.0 CAVS copies verified ranges straight from the old file and fetches only what changed — every range BLAKE3-checked before it is written, the final output still gated by SHA-256.</p>
-    </div>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Update variant (128 MiB build)</th><th class="num">v0.5 — cold cache</th><th class="num">v0.6 — cold cache + old install</th><th class="num">Reduction</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Small change</td><td class="num strike">64.55 MiB</td><td class="num">6.24 MiB</td><td class="num save">−90.3%</td></tr>
-          <tr><td>Medium change</td><td class="num strike">64.56 MiB</td><td class="num">26.53 MiB</td><td class="num save">−58.9%</td></tr>
-          <tr><td>Shifted (every byte moves)</td><td class="num strike">64.56 MiB</td><td class="num blue">10.9 KiB</td><td class="num save">−99.98%</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="cards g4" style="margin-top:26px;">
-      <div class="card reveal">
-        <span class="idx">// previous artifact</span>
-        <h3>Reuse the old install</h3>
-        <p>Point the client at <span class="mono">--previous-artifact</span>. Shared ranges are copied from disk, not the network — no chunk cache required.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.05s">
-        <span class="idx">// signatures</span>
-        <h3>Compact .cavssig</h3>
-        <p>A deterministic old-version signature, <strong>~0.07%</strong> of the source (88 KiB for a 128 MiB build), lets a new version be diffed without the old bytes.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.1s">
-        <span class="idx">// no-op</span>
-        <h3>Skip unchanged work</h3>
-        <p>An output that already matches costs <strong>0 payload bytes</strong>. In directory mode, unchanged files — including player mods — are never rewritten.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.15s">
-        <span class="idx">// coalescing</span>
-        <h3>Fewer, larger reads</h3>
-        <p>Adjacent copy ranges merge: on the shifted build, <strong>1,082 chunk ops → 18</strong> contiguous reads, read amplification 1.0.</p>
-      </div>
-    </div>
-    <div class="callout">
-      No regression: with a warm cache the wire cost is byte-for-byte identical to v0.5, and a corrupt old install demotes to the network per range instead of failing — the output is always <span class="big">byte-identical</span>.
-    </div>
-  </div>
-</section>
-
-<!-- ============ OFFLINE TOOLKIT (v0.7.0) ============ -->
-<section id="offline">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Offline toolkit — v0.7.0</span>
-      <h2 class="section-title">Sign, preview, diff, apply<br>and verify — no server.</h2>
-      <p class="section-sub">v0.7.0 turns CAVS into a complete local toolkit. Describe a release with a compact <span class="mono">.cavssig</span>, see exactly what the next build changes, produce a deterministic <span class="mono">.cavsplan</span> patch, and apply it with the same verified reconstruction the online client uses — staged, journaled, byte-identical or it fails.</p>
-    </div>
-    <div class="cards g4" style="margin-bottom:26px;">
-      <div class="card reveal">
-        <span class="idx">// preview</span>
-        <h3>See the change first</h3>
-        <p><span class="mono">cavs preview</span> classifies every entry NEW / MODIFIED / DELETED / SAME, estimates the update per route, and warns when a compressed file will patch badly.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.05s">
-        <span class="idx">// diff-plan</span>
-        <h3>Portable .cavsplan</h3>
-        <p>A deterministic, BLAKE3-sealed patch: copy-ranges from the old build plus zstd-19 fresh data. Diff against just the old signature — no old bytes needed.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.1s">
-        <span class="idx">// apply</span>
-        <h3>Safe staged apply</h3>
-        <p><span class="mono">cavs apply --inplace</span> stages, verifies every file, journals, then commits. Interrupt it and re-run; mods and unchanged files are left untouched.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.15s">
-        <span class="idx">// verify-install</span>
-        <h3>Verify any install</h3>
-        <p><span class="mono">cavs verify-install</span> checks a folder against a signature, reporting MODIFIED / MISSING / EXTRA — with <span class="mono">--allow-extra-files</span> for saves and mods.</p>
-      </div>
-    </div>
-    <p class="section-sub" style="margin-bottom:14px;">Every route for the same update, measured — 128&nbsp;MiB directory build, butler v15.27.0, xdelta3, bsdiff. Every output byte-identical.</p>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Route</th><th class="num">Network bytes</th><th class="num">Apply</th><th class="num">Peak RAM</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Full download (zstd-19)</td><td class="num strike">62.12 MiB</td><td class="num">14 ms</td><td class="num">—</td></tr>
-          <tr><td>CAVS chunk / hybrid (wire)</td><td class="num">5.42 MiB</td><td class="num">—</td><td class="num">streaming</td></tr>
-          <tr style="background:rgba(56,189,248,0.04)"><td><strong class="blue">CAVS offline plan (.cavsplan)</strong></td><td class="num blue">2.51 MiB</td><td class="num">262 ms</td><td class="num">~8 MiB</td></tr>
-          <tr><td>butler offline/default patch</td><td class="num">2.52 MiB</td><td class="num">348 ms</td><td class="num">35 MiB</td></tr>
-          <tr><td>Pairwise proxy (xdelta3+zstd-19)</td><td class="num">3.01 MiB</td><td class="num">3.7 s</td><td class="num">397 MiB</td></tr>
-          <tr><td>Pairwise proxy (bsdiff+zstd-19)</td><td class="num">3.02 MiB</td><td class="num">3.4 s</td><td class="num blue">2.3 GiB</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="callout">
-      On a shifted artifact (every byte moved) the offline plan ships <span class="big">4.21 KiB</span> vs butler's 68 KiB — 16× less — and ties the byte-level tools. The butler harness measures butler's offline/default patch; bsdiff/xdelta3 are labeled as an optimized pairwise proxy.
-    </div>
-  </div>
-</section>
-
-<!-- ============ DELIVERY PLANNER (v0.8.0) ============ -->
-<section id="planner">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Auto-route delivery — v0.8.0</span>
-      <h2 class="section-title">One update, seven routes.<br>The planner picks.</h2>
-      <p class="section-sub">v0.8.0 introduces auto-route optimized delivery: a planner that chooses between chunks, hybrid reconstruction, offline plans, optimized sidecars, bootstrap, full download or no-op — based on client state, memory budget and measured route cost. In the v0.8.0 benchmark suite, the auto-route matched or beat the optimized baseline in network bytes, apply time, peak RAM, correctness, multi-version storage and arbitrary version jumps.</p>
-    </div>
-    <div class="cards g4" style="margin-bottom:26px;">
-      <div class="card reveal">
-        <span class="idx">// route-plan</span>
-        <h3>Cost-scored routes</h3>
-        <p><span class="mono">cavs route-plan</span> prices every route for one concrete client under device profiles — <span class="mono">low-memory</span> excludes anything over its RAM budget and falls back to the streaming plan.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.05s">
-        <span class="idx">// optimize-patch</span>
-        <h3>Per-file sidecars</h3>
-        <p><span class="mono">.cavspatch</span> v2 picks the best strategy per file by measuring real candidates: copy-old (renames ship as metadata), streaming plan ops, bsdiff, xdelta3 or recompressed data. <span class="mono">--explain-strategies</span> shows why.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.1s">
-        <span class="idx">// patch-policy</span>
-        <h3>Hot pairs, never O(N²)</h3>
-        <p>Optimized patches only for pairs that matter — previous, latest-stable, top-installed. 10 versions: store + 3 sidecars = 35.91&nbsp;MiB vs 144.23&nbsp;MiB for all 45 pair patches.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.15s">
-        <span class="idx">// publish-dir</span>
-        <h3>One-pass publishing</h3>
-        <p><span class="mono">cavs publish-dir</span> emits container, signature, plan and sidecar against the previous release — preceded by a preview with rename detection and compressed-blob warnings.</p>
-      </div>
-    </div>
-    <p class="section-sub" style="margin-bottom:14px;">The full external pipeline, measured — default <span class="mono">diff</span> and optimized <span class="mono">rediff --rediff-quality 9</span> — vs the CAVS auto-route on the same 126&nbsp;MiB directory release. butler v15.28.0; every output byte-identical; RSS via <span class="mono">/usr/bin/time</span> on real binaries.</p>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Route</th><th class="num">Download</th><th class="num">Generate</th><th class="num">Apply</th><th class="num">Peak RAM</th></tr>
-        </thead>
-        <tbody>
-          <tr style="background:rgba(56,189,248,0.04)"><td><strong class="blue">CAVS auto-route (plan)</strong></td><td class="num blue">2.51 MiB</td><td class="num blue">0.54 s</td><td class="num">391 ms</td><td class="num blue">23 MiB</td></tr>
-          <tr><td>butler diff (default)</td><td class="num">2.52 MiB</td><td class="num">1.0 s</td><td class="num">331 ms</td><td class="num">35 MiB</td></tr>
-          <tr><td>butler rediff q9 (optimized)</td><td class="num">2.51 MiB</td><td class="num">11.6 s</td><td class="num">403 ms</td><td class="num">97 MiB</td></tr>
-          <tr><td>Pairwise proxy (xdelta3+zstd-19)</td><td class="num">3.01 MiB</td><td class="num">4.1 s</td><td class="num">3.4 s</td><td class="num">—</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="callout">
-      Shifted artifact: CAVS <span class="big">4.21 KiB</span> vs 11.39 KiB for the optimized patch — smaller, 2.2× faster apply, 12% of the RAM. Compressed-blob weak case closed: per-file xdelta3 routing ships <span class="big">2.53 MiB</span> where block routes paid 21.9 MiB. Raw outputs, environment, exact reproduction commands and known tradeoffs: <span class="mono">docs/results/v0.8.0/</span>.
-    </div>
-  </div>
-</section>
-
 <!-- ============ HOW IT WORKS ============ -->
 <section id="how">
   <div class="wrap">
@@ -835,266 +177,75 @@
     </div>
     <div class="steps">
       <div class="step reveal"><div class="n">01</div><h3>Package</h3><p><span class="mono">cavs pack</span> splits the release into content-defined chunks, hashes each with BLAKE3, stores a compact manifest, and optionally emits a bootstrap artifact.</p></div>
-      <div class="step reveal" style="transition-delay:.05s"><div class="n">02</div><h3>Plan</h3><p>At session open, the server compares the client's cache state with the manifest. Cold clients may get the bootstrap route; warm clients get only missing chunks.</p></div>
+      <div class="step reveal" style="transition-delay:.05s"><div class="n">02</div><h3>Plan</h3><p>At session open, the server compares the client's cache state with the manifest and picks the cheapest route: chunks, hybrid, plan, sidecar, bootstrap or no-op.</p></div>
       <div class="step reveal" style="transition-delay:.1s"><div class="n">03</div><h3>Transfer</h3><p>Missing chunks are served in binary CVSP batches. Packfile-backed stores coalesce nearby chunk reads into a few range reads.</p></div>
       <div class="step reveal" style="transition-delay:.15s"><div class="n">04</div><h3>Verify</h3><p>The client verifies chunk hashes, streams reconstruction to disk, checks the final SHA-256, then atomically promotes the result.</p></div>
-      <div class="step reveal" style="transition-delay:.2s"><div class="n">05</div><h3>Reuse</h3><p>The reconstructed file seeds the persistent cache — and, in v0.6.0, the version already installed on disk is itself a source of verified ranges, so an update reuses local bytes before it fetches any.</p></div>
+      <div class="step reveal" style="transition-delay:.2s"><div class="n">05</div><h3>Reuse</h3><p>The reconstructed file seeds the persistent cache — and the version already installed on disk is itself a source of verified ranges, so the next update reuses local bytes first.</p></div>
     </div>
   </div>
 </section>
 
-<!-- ============ COMPARISON ============ -->
-<section id="compare">
+<!-- ============ HEADLINE BENCHMARKS ============ -->
+<section id="numbers">
   <div class="wrap">
     <div class="section-head">
-      <span class="eyebrow">Positioning</span>
-      <h2 class="section-title">Not a delta file. Not a codec.<br>A reusable delivery layer.</h2>
+      <span class="eyebrow">Measured, not projected</span>
+      <h2 class="section-title">Benchmarked on real Godot games.</h2>
+      <p class="section-sub">Captured over real HTTP sessions using open-source Godot projects exported to PCK at two points in their git history. A player who already has the previous version downloads only the missing chunks.</p>
     </div>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Approach</th><th>Strength</th><th>Weakness</th><th>Best for</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Full <span class="mono">.zst</span> download</td><td>Simple, CDN-friendly</td><td>Re-downloads whole release</td><td>First installs only</td></tr>
-          <tr><td>HTTP cache</td><td>Great for same URL/object</td><td>No reuse across changed files/versions</td><td>Static assets</td></tr>
-          <tr><td>rsync-style block transfer</td><td>Useful for some file sync</td><td>Poor on large binaries with scattered changes</td><td>Controlled file sync</td></tr>
-          <tr><td>xdelta3 / bsdiff</td><td>Smallest patch for one pair</td><td>One patch per version pair, costly to build</td><td>Single known version jump</td></tr>
-          <tr style="background:rgba(56,189,248,0.04)"><td><strong class="blue">CAVS</strong></td><td>Reusable chunks, cache-aware, resumable, CDN-ready</td><td>Not always byte-minimal vs pairwise deltas</td><td>Game updates, launchers, asset bundles</td></tr>
-        </tbody>
-      </table>
+    <div class="cards g2">
+      <div class="chart reveal" data-chart='{"title":"Update payload — full download vs CAVS","subtitle":"MiB, lower is better","legend":[{"name":"Full download","cls":"bar-a"},{"name":"CAVS update","cls":"bar-c"}],"groups":[{"label":"godotengine / tps-demo","bars":[{"name":"Full","v":247.60,"cls":"bar-a","text":"247.60 MiB"},{"name":"CAVS","v":1.64,"cls":"bar-c","text":"1.64 MiB  −99.3%"}]},{"label":"GDQuest 3D third-person","bars":[{"name":"Full","v":27.61,"cls":"bar-a","text":"27.61 MiB"},{"name":"CAVS","v":8.70,"cls":"bar-c","text":"8.70 MiB  −68.5%"}]},{"label":"MechanicalFlower / Marble","bars":[{"name":"Full","v":6.55,"cls":"bar-a","text":"6.55 MiB"},{"name":"CAVS","v":0.14,"cls":"bar-c","text":"0.14 MiB  −97.9%"}]}]}'></div>
+      <div class="chart reveal" style="transition-delay:.08s" data-chart='{"title":"Update-check cost — manifest overhead","subtitle":"KiB served on a warm re-fetch, lower is better","legend":[{"name":"JSON manifest","cls":"bar-a"},{"name":"Binary v2","cls":"bar-b"}],"groups":[{"label":"tps-demo","bars":[{"name":"JSON","v":894.2,"cls":"bar-a","text":"894.2 KiB"},{"name":"Binary","v":208.5,"cls":"bar-b","text":"208.5 KiB  −76.7%"}]},{"label":"GDQuest","bars":[{"name":"JSON","v":103.1,"cls":"bar-a","text":"103.1 KiB"},{"name":"Binary","v":24.8,"cls":"bar-b","text":"24.8 KiB  −75.9%"}]},{"label":"Marble","bars":[{"name":"JSON","v":20.3,"cls":"bar-a","text":"20.3 KiB"},{"name":"Binary","v":5.1,"cls":"bar-b","text":"5.1 KiB  −75.0%"}]}]}'></div>
     </div>
-
-    <h3 style="font-size:20px; margin:48px 0 16px;">Technical comparison — real wire sizes</h3>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Game</th><th class="num">zstd full</th><th class="num">rsync wire</th><th class="num">xdelta3 -9</th><th class="num">bsdiff</th><th class="num">CAVS</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>tps-demo</td><td class="num">247.60 MiB</td><td class="num">462.95 MiB</td><td class="num">0.03 MiB</td><td class="num">0.03 MiB</td><td class="num blue">1.64 MiB</td></tr>
-          <tr><td>GDQuest</td><td class="num">27.61 MiB</td><td class="num">54.86 MiB</td><td class="num">3.78 MiB</td><td class="num">3.82 MiB</td><td class="num blue">8.70 MiB</td></tr>
-          <tr><td>Marble</td><td class="num">6.55 MiB</td><td class="num">0.02 MiB</td><td class="num">0.00 MiB</td><td class="num">0.00 MiB</td><td class="num blue">0.14 MiB</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="lead" style="margin-top:20px;">Pairwise delta tools can produce smaller patches for one exact version pair. CAVS optimizes the <em>operational</em> problem: package once per release, serve many version jumps, reuse chunks across versions, resume safely, repair corrupt caches and keep immutable CDN-cacheable objects.</p>
-    <div class="callout blue">
-      On tps-demo, <span class="big">bsdiff cost 137 s and 9.1 GB RAM</span> to build one patch — while CAVS packed once in <span class="big">3.5 s</span>, reusable across every client and version jump.
+    <p class="table-note">Re-downloading the same version costs <strong style="color:var(--green)">0 bytes</strong> of payload. All reconstructions were SHA-256 verified and byte-identical.</p>
+    <div class="hero-cta" style="margin-top:34px;">
+      <a class="btn btn-ghost" href="benchmarks.html">See the full benchmark suite →</a>
     </div>
   </div>
 </section>
 
-<!-- ============ OPERATIONAL BACKEND ============ -->
-<section id="backend">
+<!-- ============ PRODUCTS PREVIEW ============ -->
+<section id="products">
   <div class="wrap">
     <div class="section-head">
-      <span class="eyebrow">Operational wins</span>
-      <h2 class="section-title">Built for real<br>distribution infrastructure.</h2>
-      <p class="section-sub">CAVS stores shared chunks once, serves immutable packfiles, and exports an object tree suitable for S3, R2 or static CDN hosting.</p>
-    </div>
-    <div class="cards g3" style="margin-bottom:32px;">
-      <div class="card reveal">
-        <span class="idx">// global store</span>
-        <h3>Content-addressed dedup</h3>
-        <p>Two versions of Marble: <strong>13.80 MiB logical → 7.04 MiB on disk</strong> — roughly <span class="green">49% less storage</span> because shared chunks are stored once.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.06s">
-        <span class="idx">// packfiles v0.4.0</span>
-        <h3>Immutable packfile storage</h3>
-        <p>Thousands of tiny chunk files collapse into a few immutable <span class="mono">.cavspack</span> files, served through coalesced range reads.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.12s">
-        <span class="idx">// CDN export</span>
-        <h3>Deterministic object tree</h3>
-        <p>Export a stable object tree for S3 / R2 / static CDN. Same wire bytes as loose storage, far fewer objects to host.</p>
-      </div>
-    </div>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Game</th><th class="num">Chunk objects on disk</th><th class="num">Physical reads</th><th class="num">Read amplification</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Marble</td><td class="num">130 → <strong class="blue">4</strong></td><td class="num">130 → 2</td><td class="num save">1.000</td></tr>
-          <tr><td>GDQuest</td><td class="num">807 → <strong class="blue">4</strong></td><td class="num">805 → 7</td><td class="num save">1.000</td></tr>
-          <tr><td>tps-demo</td><td class="num">5,775 → <strong class="blue">6</strong></td><td class="num">5,775 → 34</td><td class="num save">1.000</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- ============ HARDENING ============ -->
-<section id="hardening">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Production hardening — v0.5.0</span>
-      <h2 class="section-title">Designed to survive interrupted<br>downloads and corrupt caches.</h2>
-      <p class="section-sub">v0.5.0 adds recovery, structured errors, fuzzing and corruption testing — without changing the wire savings.</p>
-    </div>
-    <div class="cards g4">
-      <div class="card reveal">
-        <span class="idx">// resume</span>
-        <h3>Interrupted resume</h3>
-        <p>Killed at 57 MiB of a 232 MiB bootstrap. Next fetch resumed with HTTP Range and downloaded only the remaining <strong>166.5 MiB</strong>.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.05s">
-        <span class="idx">// repair</span>
-        <h3>Cache self-repair</h3>
-        <p>3 corrupted chunks in a 5,747-chunk cache were detected, quarantined and re-fetched exactly. Next re-fetch returned to <strong>0 payload bytes</strong>.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.1s">
-        <span class="idx">// fuzzing</span>
-        <h3>Corruption matrix</h3>
-        <p>~20 targeted mutations against containers, manifests, bootstrap sidecars, packfiles and indexes. Every corrupted artifact <strong>rejected cleanly</strong>.</p>
-      </div>
-      <div class="card reveal" style="transition-delay:.15s">
-        <span class="idx">// memory</span>
-        <h3>Low client memory</h3>
-        <p>569 MB game: <strong>14.3 MiB</strong> peak RSS for cold bootstrap install, <strong>6.3 MiB</strong> peak RSS for update.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ SYNTHETIC LARGE BUILD ============ -->
-<section id="synthetic">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Scale — 1 GiB suite</span>
-      <h2 class="section-title">FastCDC handles shifted<br>and reordered builds.</h2>
-      <p class="section-sub">A deterministic 1 GiB benchmark suite tests the update shapes that matter for chunked delivery: small edits, medium edits, large edits, byte shifts and reordered blocks.</p>
-    </div>
-    <div class="table-wrap reveal">
-      <table>
-        <thead>
-          <tr><th>Update shape</th><th>Changed</th><th class="num">Pack time</th><th class="num">Update egress</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Small change</td><td>~3% of blocks</td><td class="num">6.4 s</td><td class="num">51.3 MiB</td></tr>
-          <tr><td>Medium change</td><td>~15%</td><td class="num">6.8 s</td><td class="num">216.6 MiB</td></tr>
-          <tr><td>Large change</td><td>~50%</td><td class="num">6.8 s</td><td class="num">449.1 MiB</td></tr>
-          <tr><td>Head-shifted</td><td>4 KiB inserted at head</td><td class="num">7.3 s</td><td class="num blue">10.9 KiB</td></tr>
-          <tr><td>Reordered</td><td>Same blocks, 8 MiB groups swapped</td><td class="num">9.1 s</td><td class="num blue">20.8 MiB</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="callout">
-      A 4 KiB insertion at the beginning shifts <em>every byte</em> of a 1 GiB build. Fixed blocks would lose alignment — CAVS FastCDC resynchronizes and sends only <span class="big">10.9 KiB</span>.
-    </div>
-  </div>
-</section>
-
-<!-- ============ QUICKSTART ============ -->
-<section id="quickstart">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Quickstart</span>
-      <h2 class="section-title">Try it locally.</h2>
-      <p class="section-sub">Run CAVS against two versions of your build and compare full download vs update payload.</p>
-    </div>
-    <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:22px;" class="qs-grid">
-      <div>
-        <p class="mono" style="color:var(--blue); font-size:13px; margin-bottom:10px;">1 — Install</p>
-        <pre class="code"><span class="prompt">$</span> cargo install cavs-cli
-<span class="prompt">$</span> cargo install cavs-server
-<span class="prompt">$</span> cargo install cavs-client</pre>
-      </div>
-      <div>
-        <p class="mono" style="color:var(--blue); font-size:13px; margin-bottom:10px;">2 — Pack two versions</p>
-        <pre class="code"><span class="prompt">$</span> cavs pack <span class="flag">--raw</span> game_v1.pck \
-    <span class="flag">--profile</span> auto <span class="flag">--bootstrap</span> \
-    <span class="flag">-o</span> game_v1.cavs
-
-<span class="prompt">$</span> cavs pack <span class="flag">--raw</span> game_v2.pck \
-    <span class="flag">--profile</span> auto <span class="flag">--prev</span> game_v1.cavs \
-    <span class="flag">-o</span> game_v2.cavs</pre>
-      </div>
-      <div>
-        <p class="mono" style="color:var(--blue); font-size:13px; margin-bottom:10px;">3 — Serve</p>
-        <pre class="code"><span class="prompt">$</span> cavs-server game_v1.cavs game_v2.cavs \
-    <span class="flag">--listen</span> 127.0.0.1:8990</pre>
-      </div>
-      <div>
-        <p class="mono" style="color:var(--blue); font-size:13px; margin-bottom:10px;">4 — Fetch &amp; check stats</p>
-        <pre class="code"><span class="prompt">$</span> cavs-client fetch <span class="str">http://127.0.0.1:8990</span> game_v2 \
-    <span class="flag">-o</span> out/game_v2.pck <span class="flag">--cache</span> ./cache \
-    <span class="flag">--stats-json</span> stats.json
-
-<span class="comment"># { "delivery_mode": "chunks",</span>
-<span class="comment">#   "payload_bytes": 1719664,</span>
-<span class="comment">#   "reconstructed_sha256_ok": true }</span></pre>
-      </div>
-      <div style="grid-column:1 / -1;">
-        <p class="mono" style="color:var(--green); font-size:13px; margin-bottom:10px;">5 — v0.6.0: update reusing the old install (empty cache)</p>
-        <pre class="code"><span class="prompt">$</span> cavs-client fetch <span class="str">http://127.0.0.1:8990</span> game_v2 \
-    <span class="flag">-o</span> out/game_v2.pck <span class="flag">--cache</span> ./cache \
-    <span class="flag">--previous-artifact</span> ./game_v1.pck <span class="flag">--stats-json</span> stats.json
-
-<span class="comment"># { "sources": { "previous_artifact_bytes": 120974668,</span>
-<span class="comment">#                "network_bytes": 6544479 },   ← −90% vs a cold v0.5 fetch</span>
-<span class="comment">#   "reconstructed_sha256_ok": true }</span></pre>
-      </div>
-      <div style="grid-column:1 / -1;">
-        <p class="mono" style="color:var(--green); font-size:13px; margin-bottom:10px;">6 — v0.7.0: offline patch — no server (sign · preview · diff · apply · verify)</p>
-        <pre class="code"><span class="prompt">$</span> cavs signature export ./Build_v1 <span class="flag">--raw</span> <span class="flag">-o</span> build_v1.cavssig
-<span class="prompt">$</span> cavs preview ./Build_v2 <span class="flag">--against</span> build_v1.cavssig <span class="flag">--changes-only</span>
-<span class="prompt">$</span> cavs diff-plan ./Build_v1 ./Build_v2 <span class="flag">-o</span> update.cavsplan
-<span class="prompt">$</span> cavs apply <span class="flag">--old</span> ./InstalledGame <span class="flag">--plan</span> update.cavsplan <span class="flag">--inplace</span> <span class="flag">--verify</span>
-
-<span class="comment"># apply : OK — InstalledGame (verified)</span>
-<span class="comment">#   files : 6 written, 38 unchanged (no-op), 2 deleted</span>
-<span class="comment">#   bytes : 20.58 MiB — 19.00 MiB from the old install, 1.58 MiB from the plan</span></pre>
-      </div>
-
-      <div class="reveal" style="margin-top:26px;">
-        <p class="mono" style="color:var(--green); font-size:13px; margin-bottom:10px;">7 — v0.8.0: auto-route delivery (publish · policy · route-plan)</p>
-        <pre class="code"><span class="prompt">$</span> cavs publish-dir ./Build_v2 <span class="flag">--previous</span> ./Build_v1 <span class="flag">--out-dir</span> releases/
-<span class="prompt">$</span> cavs patch-policy <span class="flag">--versions</span> v1,...,v10 <span class="flag">--distribution</span> shares.json
-<span class="prompt">$</span> cavs route-plan <span class="flag">--installed</span> ./InstalledGame <span class="flag">--new</span> ./Build_v2 \
-    <span class="flag">--patch</span> releases/v1_to_v2.cavspatch <span class="flag">--profile</span> low-memory
-
-<span class="comment"># cavspatch  7.67 MiB  ram 551.67 MiB  [excluded] over the 128 MiB budget</span>
-<span class="comment"># chosen : cavsplan — 7.63 MiB over the wire, fits low-memory (40 MiB peak)</span></pre>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ USE CASES ============ -->
-<section id="usecases">
-  <div class="wrap">
-    <div class="section-head center">
-      <span class="eyebrow">Where CAVS fits</span>
-      <h2 class="section-title">Built for version streams.</h2>
+      <span class="eyebrow">The toolkit</span>
+      <h2 class="section-title">One engine. Many surfaces.</h2>
+      <p class="section-sub">A Rust core with a command-line toolkit, an HTTP origin and streaming client, a shipping Godot plugin, a Steam update analyzer — and engine plugins on the way.</p>
     </div>
     <div class="cards g3">
-      <div class="card reveal"><h3>Godot PCK updates</h3><p>Ship PCK updates without forcing players to download the whole PCK again. Reconstruct and mount with <span class="mono">load_resource_pack()</span>.</p></div>
-      <div class="card reveal" style="transition-delay:.05s"><h3>Custom launchers</h3><p>Use CAVS as the update layer for your own launcher. Package once per release; clients fetch only missing chunks.</p></div>
-      <div class="card reveal" style="transition-delay:.1s"><h3>DLC &amp; live content</h3><p>Reuse chunks across DLC, branches and content drops. Avoid storing and serving the same bytes repeatedly.</p></div>
-      <div class="card reveal"><h3>Binary asset distribution</h3><p>Distribute large binary bundles, archives or asset packs with content-addressed reuse and verified reconstruction.</p></div>
-      <div class="card reveal" style="transition-delay:.05s"><h3>Repeated content libraries</h3><p>Version streams where the same assets reappear — cache reuse turns repeated bytes into zero-payload fetches.</p></div>
-      <div class="card reveal" style="transition-delay:.1s"><h3>Update-size analysis</h3><p>Use CAVS-style chunk analysis to understand <em>why</em> game updates become large before you publish them.</p></div>
+      <div class="card reveal">
+        <span class="idx">// cavs</span>
+        <h3>CAVS CLI <span class="badge available" style="font-size:9.5px;">stable</span></h3>
+        <p>Package, inspect, verify, diff, apply and benchmark. The offline toolkit and the delivery planner in one binary.</p>
+      </div>
+      <div class="card reveal" style="transition-delay:.05s">
+        <span class="idx">// cavs-server + cavs-client</span>
+        <h3>Server &amp; client <span class="badge available" style="font-size:9.5px;">stable</span></h3>
+        <p>A stateful HTTP origin with a route planner, and a native streaming client with a verifying, self-repairing cache.</p>
+      </div>
+      <div class="card reveal" style="transition-delay:.1s">
+        <span class="idx">// addons/cavs</span>
+        <h3>Godot plugin <span class="badge available" style="font-size:9.5px;">stable</span></h3>
+        <p>A 100% GDScript client — no GDExtension, no native binaries. Reconstructs and mounts PCKs with <span class="mono">load_resource_pack()</span>.</p>
+      </div>
+      <div class="card reveal">
+        <span class="idx">// cavs-steam</span>
+        <h3>SteamPipe Analyzer <span class="badge available" style="font-size:9.5px;">stable</span></h3>
+        <p>Finds Steam update bloat before your players download it, and recommends packaging fixes per engine.</p>
+      </div>
+      <div class="card reveal" style="transition-delay:.05s">
+        <span class="idx">// unity</span>
+        <h3>Unity plugin <span class="badge soon" style="font-size:9.5px;">soon</span></h3>
+        <p>CAVS delivery for AssetBundles and Addressables, backed by the Rust core over a stable C ABI.</p>
+      </div>
+      <div class="card reveal" style="transition-delay:.1s">
+        <span class="idx">// unreal</span>
+        <h3>Unreal plugin <span class="badge soon" style="font-size:9.5px;">soon</span></h3>
+        <p>CAVS delivery for PAK / IoStore (<span class="mono">.ucas</span> / <span class="mono">.utoc</span>) containers.</p>
+      </div>
     </div>
-  </div>
-</section>
-
-<!-- ============ RELEASE PROGRESSION ============ -->
-<section id="releases">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Maturity</span>
-      <h2 class="section-title">From prototype to<br>hardened delivery core.</h2>
-    </div>
-    <div class="rel reveal">
-      <div class="rel-row"><span class="ver">v0.1.2</span><span class="focus">Dual route + auto profile</span><span class="res">Cold installs −7% to −13%, updates preserved</span></div>
-      <div class="rel-row"><span class="ver">v0.3.0</span><span class="focus">Compact manifest</span><span class="res">Manifest wire overhead −75% to −77%</span></div>
-      <div class="rel-row"><span class="ver">v0.4.0</span><span class="focus">Packfile storage</span><span class="res">5,775 chunk objects → 6 packfiles on tps-demo</span></div>
-      <div class="rel-row"><span class="ver">v0.5.0</span><span class="focus">Production hardening</span><span class="res">Resume, repair, fuzzing, corruption matrix, large-build suite</span></div>
-      <div class="rel-row"><span class="ver">v0.6.0</span><span class="focus">Hybrid reconstruction</span><span class="res">Reuse the installed version: −90% updates on a cold cache, signatures, directory mode</span></div>
-      <div class="rel-row"><span class="ver">v0.7.0</span><span class="focus">Offline toolkit</span><span class="res">Sign, preview, diff, apply, verify locally; portable .cavsplan patches; fair butler + multi-route benchmarks</span></div>
-      <div class="rel-row"><span class="ver">v0.8.0</span><span class="focus">Auto-route delivery</span><span class="res">Route planner with device profiles, per-file .cavspatch sidecars, hot-pair policy, full-pipeline proof suite</span></div>
+    <div class="hero-cta" style="margin-top:34px;">
+      <a class="btn btn-ghost" href="products.html">Explore all products &amp; commands →</a>
     </div>
   </div>
 </section>
@@ -1127,26 +278,6 @@
   </div>
 </section>
 
-<!-- ============ LIMITATIONS ============ -->
-<section id="limits">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow" style="color:var(--amber)"><span style="background:linear-gradient(90deg,var(--amber),transparent)"></span>Honest limitations</span>
-      <h2 class="section-title">Where CAVS is not<br>the right tool.</h2>
-    </div>
-    <p class="lead">CAVS is not a video codec and does not pretend to replace one. It's most valuable when redundancy crosses versions, releases, bundles or repeated assets.</p>
-    <ul class="bullets warn">
-      <li>Single video, first play: ~0% savings, small packaging overhead.</li>
-      <li>ABR ladders: different bitrates usually share no bytes.</li>
-      <li>Already-compressed JPEG / MP4 / ZIP files: near-zero savings.</li>
-      <li>Pairwise delta tools can be smaller for one exact version pair.</li>
-    </ul>
-    <div class="callout blue" style="margin-top:28px;">
-      CAVS is strongest for <span class="big">game updates, engine packs, launchers, DLC, binary assets and version streams</span> where cache reuse matters.
-    </div>
-  </div>
-</section>
-
 <!-- ============ FAQ ============ -->
 <section id="faq">
   <div class="wrap" style="max-width:820px;">
@@ -1155,17 +286,11 @@
       <h2 class="section-title">Questions.</h2>
     </div>
     <div class="faq">
-      <div class="faq-item"><button class="faq-q">Is CAVS a replacement for SteamPipe?</button><div class="faq-a"><p>No. CAVS can be used as an external delivery layer or as an analyzer-style technology. It does not require replacing engine formats — it works above existing binary artifacts.</p></div></div>
-      <div class="faq-item"><button class="faq-q">Is CAVS a codec?</button><div class="faq-a"><p>No. CAVS does not compress pixels like AV1, H.264 or HEVC. It deduplicates and delivers already-built content-addressed chunks. For single videos or ABR ladders, savings are expected to be near zero.</p></div></div>
+      <div class="faq-item"><button class="faq-q">Is CAVS a codec?</button><div class="faq-a"><p>No. CAVS does not compress pixels like AV1, H.264 or HEVC. It deduplicates and delivers already-built content-addressed chunks. For single videos or ABR ladders, savings are near zero — and reported honestly.</p></div></div>
       <div class="faq-item"><button class="faq-q">Why not just use xdelta3 or bsdiff?</button><div class="faq-a"><p>Pairwise delta tools can produce smaller patches for one exact version pair. CAVS is designed for version streams: package once per release, serve many version jumps, reuse cache across versions, resume safely, and expose immutable CDN-cacheable storage.</p></div></div>
-      <div class="faq-item"><button class="faq-q">Can CAVS reuse the version already installed?</button><div class="faq-a"><p>Yes, since v0.6.0. Pass <span class="mono">--previous-artifact</span> and the client copies verified ranges straight from the old file, downloading only what changed — even with an empty chunk cache. On a 128&nbsp;MiB build a small update drops from 64.55&nbsp;MiB to 6.24&nbsp;MiB (−90%). Every copied range is BLAKE3-checked before it is written, and a corrupt old install safely falls back to the network.</p></div></div>
-      <div class="faq-item"><button class="faq-q">Can I diff and apply updates without a CAVS server?</button><div class="faq-a"><p>Yes, since v0.7.0. <span class="mono">cavs diff-plan</span> produces a deterministic, BLAKE3-sealed <span class="mono">.cavsplan</span> — copy-ranges from the old build plus zstd-19 fresh data — and <span class="mono">cavs apply</span> reconstructs it locally with the same verified staged model as the online client (byte-identical or it fails). <span class="mono">cavs preview</span>, <span class="mono">verify-install</span>, <span class="mono">file</span> and <span class="mono">ls</span> complete the offline workflow.</p></div></div>
-      <div class="faq-item"><button class="faq-q">How does CAVS compare to butler?</button><div class="faq-a"><p>v0.8.0 measures butler's <em>complete</em> pipeline with its own binaries — default <span class="mono">diff</span> and optimized <span class="mono">rediff --rediff-quality 9</span> (<span class="mono">cavs bench butler-full</span> / <span class="mono">full-pipeline</span>). On a 126&nbsp;MiB directory build the CAVS auto-route ties the optimized patch on bytes (2.51&nbsp;MiB) and apply time while using 23 vs 97&nbsp;MiB of RAM and generating 21× faster; on a shifted artifact it wins every column (4.21 vs 11.39&nbsp;KiB). Raw outputs and reproduction commands live in <span class="mono">docs/results/v0.8.0/</span>. CAVS still optimizes a different model: package once per release, serve any version jump from one content-addressed store.</p></div></div>
-      <div class="faq-item"><button class="faq-q">When does the planner use an optimized sidecar?</button><div class="faq-a"><p>Only when it is actually the cheapest viable route: the client has the exact old version the sidecar was generated for, the payload beats chunks/plan, and its estimated apply memory fits the device profile — a bsdiff-heavy sidecar needing ~552&nbsp;MiB is excluded on a <span class="mono">low-memory</span> profile and the streaming plan (~40&nbsp;MiB) is served instead. Sidecars are generated only for hot pairs picked by <span class="mono">cavs patch-policy</span> (previous, latest-stable, top-installed), never all O(N²) pairs.</p></div></div>
-      <div class="faq-item"><button class="faq-q">What about builds shipped as one compressed archive?</button><div class="faq-a"><p>That shape defeats every block-level patcher — a small source change cascades across the compressed bytes. v0.8.0 detects it (<span class="mono">cavs preview --detect-compressed-blobs</span>) and the sidecar optimizer routes such files through a byte-level delta automatically: 2.53&nbsp;MiB where block routes paid 21.9&nbsp;MiB on the same change. Publishing the uncompressed folder is still the better fix.</p></div></div>
+      <div class="faq-item"><button class="faq-q">Can CAVS reuse the version already installed?</button><div class="faq-a"><p>Yes. Pass <span class="mono">--previous-artifact</span> and the client copies verified ranges straight from the old file, downloading only what changed — even with an empty chunk cache. Every copied range is BLAKE3-checked before it is written, and a corrupt old install safely falls back to the network.</p></div></div>
+      <div class="faq-item"><button class="faq-q">Can I diff and apply updates without a server?</button><div class="faq-a"><p>Yes. <span class="mono">cavs diff-plan</span> produces a deterministic, BLAKE3-sealed <span class="mono">.cavsplan</span>, and <span class="mono">cavs apply</span> reconstructs it locally with the same verified staged model as the online client — byte-identical or it fails. <span class="mono">preview</span>, <span class="mono">verify-install</span>, <span class="mono">file</span> and <span class="mono">ls</span> complete the offline workflow.</p></div></div>
       <div class="faq-item"><button class="faq-q">Does CAVS preserve the original file?</button><div class="faq-a"><p>Yes. CAVS reconstructs the final artifact byte-for-byte and verifies it with SHA-256 before promotion. Reconstruction is byte-identical or it fails — never halfway.</p></div></div>
-      <div class="faq-item"><button class="faq-q">What happens if a download is interrupted?</button><div class="faq-a"><p>v0.5.0 keeps a crash-safe journal and resumes bootstrap downloads with HTTP Range when possible. Chunk fetches resume from the persistent cache have-set.</p></div></div>
-      <div class="faq-item"><button class="faq-q">What if the client cache is corrupt?</button><div class="faq-a"><p>The client can verify cached chunks, quarantine corrupt entries, and repair only the missing or corrupt chunks from the server — returning to zero-payload re-fetches afterward.</p></div></div>
     </div>
   </div>
 </section>
@@ -1178,11 +303,11 @@
       <h2>Try CAVS on your own build.</h2>
       <p>Run CAVS against two versions of your game build and compare full download vs update payload, manifest overhead, cache reuse and reconstruction integrity.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="https://github.com/orelvis15/cavs-oss" target="_blank" rel="noopener">
+        <a class="btn btn-primary" href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49l-.01-1.9c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9l-.01 2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
           View on GitHub
         </a>
-        <a class="btn btn-ghost" href="#quickstart">Quickstart</a>
+        <a class="btn btn-ghost" href="products.html#quickstart">Quickstart</a>
       </div>
       <p class="cta-beta">Have a Godot game with frequent PCK updates? Open an issue or start a discussion — real-world test cases are welcome.</p>
     </div>
@@ -1194,62 +319,21 @@
   <div class="wrap">
     <div class="foot-grid">
       <div>
-        <a href="#top" class="brand" style="font-size:18px;"><img src="assets/logo.png" alt="" style="width:26px;height:26px;" /> CAVS</a>
+        <a href="index.html" class="brand" style="font-size:18px;"><img src="assets/logo-transparent-128.png" alt="" style="width:26px;height:26px;" /> CAVS</a>
         <p class="foot-note">Content-Addressable Verified Streaming.<br>Ship game updates that weigh what changed.</p>
       </div>
       <div class="foot-links">
-        <a href="https://github.com/orelvis15/cavs-oss" target="_blank" rel="noopener">GitHub</a>
-        <a href="#benchmarks">Benchmarks</a>
-        <a href="#quickstart">Quickstart</a>
-        <a href="#architecture">Architecture</a>
-        <a href="#compare">Vs. deltas</a>
-        <a href="#faq">FAQ</a>
+        <a href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">GitHub</a>
+        <a href="benchmarks.html">Benchmarks</a>
+        <a href="products.html">Products</a>
+        <a href="changelog.html">Changelog</a>
       </div>
     </div>
     <p class="foot-note" style="margin-top:32px; opacity:.75;">© 2026 CAVS · Apache 2.0 licensed · Benchmarks measured on real Godot PCKs over real HTTP sessions.</p>
   </div>
 </footer>
 
-<script>
-  // nav shadow on scroll
-  const nav = document.getElementById('nav');
-  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 20);
-  window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
-
-  // mobile menu
-  const burger = document.getElementById('burger');
-  const navLinks = document.getElementById('navLinks');
-  burger.addEventListener('click', () => navLinks.classList.toggle('open'));
-  navLinks.querySelectorAll('a').forEach(a => a.addEventListener('click', () => navLinks.classList.remove('open')));
-
-  // FAQ accordion
-  document.querySelectorAll('.faq-q').forEach(q => {
-    q.addEventListener('click', () => {
-      const item = q.parentElement;
-      const wasOpen = item.classList.contains('open');
-      document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
-      if (!wasOpen) item.classList.add('open');
-    });
-  });
-
-  // copy terminal
-  const copyBtn = document.getElementById('copyBtn');
-  copyBtn.addEventListener('click', () => {
-    const cmds = `cavs pack --raw game_v1.pck --profile auto --bootstrap -o game_v1.cavs
-cavs pack --raw game_v2.pck --profile auto --prev game_v1.cavs -o game_v2.cavs
-cavs-server game_v1.cavs game_v2.cavs
-cavs-client fetch http://localhost:8990 game_v2 --cache ./cache`;
-    navigator.clipboard.writeText(cmds).then(() => {
-      copyBtn.textContent = 'copied ✓';
-      setTimeout(() => copyBtn.textContent = 'copy', 1600);
-    });
-  });
-
-  // scroll reveal
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
-  }, { threshold: 0.12 });
-  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
-</script>
+<script src="assets/app.js"></script>
+<script src="assets/charts.js"></script>
 </body>
 </html>

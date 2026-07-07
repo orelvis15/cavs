@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CAVS — Products</title>
+<meta name="description" content="The CAVS toolkit: the cavs CLI and its command reference, cavs-server and cavs-client, the Rust core engine, the Godot plugin, the SteamPipe analyzer, and the Unity / Unreal plugins on the way." />
+<meta name="author" content="Orelvis" />
+<meta name="theme-color" content="#0A0E1A" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="CAVS Products" />
+<meta property="og:description" content="CLI, server, client, Rust core, Godot plugin and SteamPipe analyzer — with commands explained." />
+<meta property="og:image" content="assets/og-thumb.webp" />
+<link rel="icon" type="image/png" href="assets/logo-transparent-128.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/styles.css" />
+<script>(function(){try{var t=localStorage.getItem('cavs-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="bg-grid"></div>
+
+<!-- ============ NAV ============ -->
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="brand">
+      <img src="assets/logo-transparent-128.png" alt="CAVS logo" />
+      CAVS <span class="tag">v0.8.0</span>
+    </a>
+    <nav class="nav-links" id="navLinks">
+      <a class="nav-page" href="index.html">Home</a>
+      <a class="nav-page" href="benchmarks.html">Benchmarks</a>
+      <a class="nav-page active" href="products.html">Products</a>
+      <a class="nav-page" href="changelog.html">Changelog</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle light / dark">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </button>
+      <a class="btn btn-primary btn-sm" href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49l-.01-1.9c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9l-.01 2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
+        Star
+      </a>
+    </nav>
+    <button class="burger" id="burger" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- ============ PAGE HEAD ============ -->
+<section class="page-head">
+  <div class="wrap">
+    <span class="eyebrow">The toolkit</span>
+    <h1>One engine.<br><span class="accent">Many surfaces.</span></h1>
+    <p class="section-sub">CAVS is a Rust core wrapped in a command-line toolkit, an HTTP origin and a streaming client — plus a shipping Godot plugin, a Steam update analyzer, and engine plugins on the way. Everything below is Apache-2.0 licensed and lives in one repository.</p>
+  </div>
+</section>
+
+<!-- ============ OVERVIEW GRID ============ -->
+<section style="padding-top:48px;">
+  <div class="wrap">
+    <div class="cards g3">
+      <a href="#cli" class="prod reveal">
+        <div class="prod-top">
+          <span class="prod-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+          <div><h3>CAVS CLI</h3><div class="prod-cmd">cavs</div></div>
+          <div class="prod-badges"><span class="badge available">stable</span></div>
+        </div>
+        <p>Package, inspect, verify, diff, apply, plan and benchmark — the whole offline toolkit and delivery planner in one binary.</p>
+      </a>
+      <a href="#serving" class="prod reveal" style="transition-delay:.05s">
+        <div class="prod-top">
+          <span class="prod-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span>
+          <div><h3>Server &amp; Client</h3><div class="prod-cmd">cavs-server · cavs-client</div></div>
+          <div class="prod-badges"><span class="badge available">stable</span></div>
+        </div>
+        <p>A stateful HTTP origin with a route planner, and a native streaming client with a verifying, self-repairing cache.</p>
+      </a>
+      <a href="#core" class="prod reveal" style="transition-delay:.1s">
+        <div class="prod-top">
+          <span class="prod-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg></span>
+          <div><h3>Core engine</h3><div class="prod-cmd">Rust workspace</div></div>
+          <div class="prod-badges"><span class="badge available">stable</span></div>
+        </div>
+        <p>The <span class="mono">.cavs</span> format, content-addressable store and CVSP protocol as a set of composable Rust crates.</p>
+      </a>
+      <a href="#godot" class="prod reveal">
+        <div class="prod-top">
+          <span class="prod-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="10" r="1.2" fill="currentColor"/><circle cx="15" cy="10" r="1.2" fill="currentColor"/><path d="M8 15h8"/></svg></span>
+          <div><h3>Godot plugin</h3><div class="prod-cmd">addons/cavs</div></div>
+          <div class="prod-badges"><span class="badge available">stable</span></div>
+        </div>
+        <p>A 100% GDScript client — no GDExtension, no native binaries. Runs on every platform Godot exports to.</p>
+      </a>
+      <a href="#steam" class="prod reveal" style="transition-delay:.05s">
+        <div class="prod-top">
+          <span class="prod-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+          <div><h3>SteamPipe Analyzer</h3><div class="prod-cmd">cavs-steam</div></div>
+          <div class="prod-badges"><span class="badge available">stable</span></div>
+        </div>
+        <p>Finds Steam update bloat before your players download it, and recommends packaging fixes per engine.</p>
+      </a>
+      <a href="#engines" class="prod reveal" style="transition-delay:.1s">
+        <div class="prod-top">
+          <span class="prod-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+          <div><h3>Unity &amp; Unreal</h3><div class="prod-cmd">plugins</div></div>
+          <div class="prod-badges"><span class="badge soon">soon</span></div>
+        </div>
+        <p>CAVS delivery for AssetBundles / Addressables and PAK / IoStore containers, over the shared Rust core.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLI ============ -->
+<section class="anchor" id="cli">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">cavs — the CLI</span>
+      <h2 class="section-title">The whole workflow,<br>one command.</h2>
+      <p class="section-sub">Content is split into chunks identified by their BLAKE3-256 hash; each unique chunk is stored once. The CLI packages releases, produces offline patches, plans delivery routes, manages the store and runs the reproducible benchmark suite. Every command is grouped below.</p>
+    </div>
+
+    <h3 style="font-size:18px; margin-bottom:6px;" class="mono blue">// packaging</h3>
+    <div class="cmd-list">
+      <div class="cmd-row"><code>cavs pack --raw &lt;file&gt; -o &lt;out.cavs&gt;</code><div class="cmd-desc">Package any file (PCK, bundle, binary) into a deduplicated <span class="mono">.cavs</span>. <span class="mono">--profile auto</span> classifies the payload and sweeps candidate profiles; <span class="mono">--prev</span> optimizes for update egress; <span class="mono">--bootstrap</span> also emits a full artifact for cold clients; <span class="mono">--sign</span> attaches an Ed25519 signature.</div></div>
+      <div class="cmd-row"><code>cavs pack-dir &lt;dir&gt; -o &lt;out.cavs&gt;</code><div class="cmd-desc">Package a directory tree as a container: one deduplicated track per file, plus directory / symlink / exec metadata. Applies with per-file no-op detection and staged installs. <span class="mono">--ignore</span> globs merge with <span class="mono">.cavsignore</span>.</div></div>
+      <div class="cmd-row"><code>cavs unpack &lt;in.cavs&gt; -o &lt;dir&gt;</code><div class="cmd-desc">Reconstruct the original file(s) from a <span class="mono">.cavs</span>, verifying the final SHA-256.</div></div>
+      <div class="cmd-row"><code>cavs keygen -o &lt;key&gt;</code><div class="cmd-desc">Generate an Ed25519 signing keypair so clients can verify your releases.</div></div>
+    </div>
+
+    <h3 style="font-size:18px; margin:36px 0 6px;" class="mono blue">// offline toolkit — no server</h3>
+    <div class="cmd-list">
+      <div class="cmd-row"><code>cavs signature export &lt;build&gt; -o &lt;.cavssig&gt;</code><div class="cmd-desc">Export a compact, deterministic old-version signature (~0.07% of the source) so a new build can be diffed without the old bytes. <span class="mono">signature inspect / ls / verify</span> round out the subcommand.</div></div>
+      <div class="cmd-row"><code>cavs preview &lt;new&gt; --against &lt;.cavssig&gt;</code><div class="cmd-desc">Classify every entry NEW / MODIFIED / DELETED / SAME, estimate the update per route, detect renames by content, and warn when a compressed file will patch badly.</div></div>
+      <div class="cmd-row"><code>cavs diff-plan &lt;old&gt; &lt;new&gt; -o &lt;.cavsplan&gt;</code><div class="cmd-desc">Produce a deterministic, BLAKE3-sealed patch: copy-ranges from the old build plus zstd-19 fresh data. Portable and server-free.</div></div>
+      <div class="cmd-row"><code>cavs apply --old &lt;dir&gt; --plan &lt;.cavsplan&gt; --inplace</code><div class="cmd-desc">Stage, verify every file, journal, then commit. Interrupt it and re-run — mods and unchanged files are left untouched. <span class="mono">--verify</span> gates the final output.</div></div>
+      <div class="cmd-row"><code>cavs verify-install &lt;dir&gt; --against &lt;.cavssig&gt;</code><div class="cmd-desc">Check a folder against a signature, reporting MODIFIED / MISSING / EXTRA. <span class="mono">--allow-extra-files</span> tolerates saves and mods.</div></div>
+      <div class="cmd-row"><code>cavs file &lt;.cavs&gt; · cavs ls &lt;.cavs&gt;</code><div class="cmd-desc">Inspect and list entries inside a container without unpacking it.</div></div>
+    </div>
+
+    <h3 style="font-size:18px; margin:36px 0 6px;" class="mono blue">// delivery planner &amp; sidecars</h3>
+    <div class="cmd-list">
+      <div class="cmd-row"><code>cavs route-plan --installed &lt;dir&gt; --new &lt;dir&gt;</code><div class="cmd-desc">Price every route for one concrete client under a device profile (<span class="mono">default</span>, <span class="mono">low-memory</span>, <span class="mono">slow-network</span>, <span class="mono">low-disk</span>) and pick the cheapest that fits the memory budget.</div></div>
+      <div class="cmd-row"><code>cavs optimize-patch &lt;old&gt; &lt;new&gt; -o &lt;.cavspatch&gt;</code><div class="cmd-desc">Build a per-file optimized sidecar: <span class="mono">copy-old</span>, streaming plan ops, <span class="mono">bsdiff</span>, <span class="mono">xdelta3</span> or recompressed data — every candidate measured, the smallest wins. <span class="mono">--explain-strategies</span> shows why.</div></div>
+      <div class="cmd-row"><code>cavs apply-patch &lt;.cavspatch&gt; --memory-budget 128MiB</code><div class="cmd-desc">Apply a sidecar with a hard memory ceiling — a route that would exceed it is refused up front (<span class="mono">CAVS-E-MEMORY-BUDGET-EXCEEDED</span>).</div></div>
+      <div class="cmd-row"><code>cavs patch-policy --versions v1,…,vN</code><div class="cmd-desc">Choose the hot pairs worth optimizing (previous, latest-stable, top-installed) so you never generate all O(N²) patches.</div></div>
+      <div class="cmd-row"><code>cavs publish-dir &lt;new&gt; --previous &lt;old&gt; --out-dir &lt;dir&gt;</code><div class="cmd-desc">One-pass publishing: container + signature + plan + sidecar, preceded by a preview with rename detection and compressed-blob warnings.</div></div>
+    </div>
+
+    <h3 style="font-size:18px; margin:36px 0 6px;" class="mono blue">// store, verify &amp; diagnostics</h3>
+    <div class="cmd-list">
+      <div class="cmd-row"><code>cavs store add / rm / gc / stat / verify / export</code><div class="cmd-desc">Manage the global content-addressable store: dedup index with refcounting and GC, loose or <span class="mono">.cavspack</span> packfile layout, and a deterministic CDN-ready object export.</div></div>
+      <div class="cmd-row"><code>cavs info &lt;.cavs&gt; · cavs verify &lt;.cavs&gt;</code><div class="cmd-desc">Inspect container metadata and verify integrity end to end.</div></div>
+      <div class="cmd-row"><code>cavs manifest …</code><div class="cmd-desc">Convert and benchmark manifest formats (JSON v1 ↔ compact binary <span class="mono">CAVSMF2</span>).</div></div>
+      <div class="cmd-row"><code>cavs doctor · cavs test corrupt · cavs test apply-recovery</code><div class="cmd-desc">Environment diagnostics, the ~20-case corruption matrix, and the interrupted-apply recovery suite.</div></div>
+    </div>
+
+    <h3 style="font-size:18px; margin:36px 0 6px;" class="mono blue">// benchmarks</h3>
+    <div class="cmd-list">
+      <div class="cmd-row"><code>cavs bench gen --size 1GiB --out ds</code><div class="cmd-desc">Emit a deterministic dataset (same seed ⇒ identical bytes on any machine): a base build plus the update shapes that matter for chunked delivery.</div></div>
+      <div class="cmd-row"><code>cavs bench suite --dataset ds --out results</code><div class="cmd-desc">Pack and measure every version, writing <span class="mono">summary.md</span> and <span class="mono">summary.json</span>.</div></div>
+      <div class="cmd-row"><code>cavs bench full-pipeline · butler-full · routes</code><div class="cmd-desc">Measure every CAVS route and butler's complete pipeline (default <span class="mono">diff</span> and optimized <span class="mono">rediff</span>) on the same transition, with byte-level proxies. <span class="mono">delta</span> and <span class="mono">compression</span> cross-checks included.</div></div>
+    </div>
+
+    <p class="table-note" style="margin-top:22px;">Every subcommand has full <span class="mono">--help</span>. Without <span class="mono">--raw</span>, <span class="mono">cavs pack</span> treats inputs as video and segments them into CMAF/fMP4 via ffmpeg before packaging.</p>
+  </div>
+</section>
+
+<!-- ============ SERVER & CLIENT ============ -->
+<section class="anchor" id="serving">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">cavs-server · cavs-client</span>
+      <h2 class="section-title">Serve and fetch.</h2>
+    </div>
+    <div class="cards g2">
+      <div class="card reveal">
+        <span class="idx">// cavs-server</span>
+        <h3>Stateful HTTP origin</h3>
+        <p>Serves one or more <span class="mono">.cavs</span> releases over HTTP/HTTPS. Negotiates the compact manifest, tracks per-session cache have-sets with a Bloom filter, runs the route planner, and exposes a Range-resumable bootstrap endpoint.</p>
+        <pre class="code" style="margin-top:16px;"><span class="prompt">$</span> cavs-server game_v1.cavs game_v2.cavs \
+    <span class="flag">--listen</span> 127.0.0.1:8990</pre>
+      </div>
+      <div class="card reveal" style="transition-delay:.05s">
+        <span class="idx">// cavs-client</span>
+        <h3>Native streaming client</h3>
+        <p>Reconstructs by streaming to disk with a persistent content-addressable cache — verify / repair / gc, a crash-safe resume journal, and retry with backoff. Peak RAM stays constant regardless of game size.</p>
+        <pre class="code" style="margin-top:16px;"><span class="prompt">$</span> cavs-client fetch <span class="str">http://127.0.0.1:8990</span> game_v2 \
+    <span class="flag">-o</span> out/game_v2.pck <span class="flag">--cache</span> ./cache \
+    <span class="flag">--stats-json</span> stats.json</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CORE ============ -->
+<section class="anchor" id="core">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Core engine</span>
+      <h2 class="section-title">A workspace of Rust crates.</h2>
+      <p class="section-sub">The delivery engine is a Cargo workspace. Libraries compose the format, store and protocol; three of the crates ship as the command-line tools.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead><tr><th>Crate</th><th>Kind</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">cavs-hash</td><td>lib</td><td>BLAKE3-256 chunk identity, Merkle root, signature message</td></tr>
+          <tr><td class="mono">cavs-chunker</td><td>lib</td><td>Fixed-size and FastCDC chunking</td></tr>
+          <tr><td class="mono">cavs-store</td><td>lib</td><td>Dedup index + on-disk store (refcount + GC; loose or <span class="mono">.cavspack</span> packfiles with coalesced range reads)</td></tr>
+          <tr><td class="mono">cavs-format</td><td>lib</td><td>The <span class="mono">.cavs</span> binary format: writer, hardened reader, Ed25519 signing</td></tr>
+          <tr><td class="mono">cavs-proto</td><td>lib</td><td>CVSP wire protocol: manifests, sessions, binary batches, Bloom have-set, <span class="mono">CAVS-E-*</span> error taxonomy</td></tr>
+          <tr><td class="mono">cavs-manifest</td><td>lib</td><td>Manifest formats: compact binary v2 (<span class="mono">CAVSMF2</span>) + JSON v1 compatibility</td></tr>
+          <tr><td class="mono">cavs-cli</td><td class="blue"><strong>tool · cavs</strong></td><td>Package / inspect / verify / reconstruct / store / doctor / bench</td></tr>
+          <tr><td class="mono">cavs-server</td><td class="blue"><strong>tool · cavs-server</strong></td><td>Stateful HTTP/HTTPS origin (Range-resumable bootstrap)</td></tr>
+          <tr><td class="mono">cavs-client</td><td class="blue"><strong>tool · cavs-client</strong></td><td>Native streaming client: cache verify/repair/gc, resume journal, backoff</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="code" style="margin-top:22px;"><span class="prompt">$</span> cargo build <span class="flag">--release</span>      <span class="comment"># binaries in target/release/</span>
+<span class="prompt">$</span> cargo test                 <span class="comment"># unit + integration + end-to-end</span></pre>
+  </div>
+</section>
+
+<!-- ============ GODOT ============ -->
+<section class="anchor" id="godot">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Godot plugin <span class="badge available" style="margin-left:8px;">stable</span></span>
+      <h2 class="section-title">Deduplicated delivery,<br>pure GDScript.</h2>
+      <p class="section-sub">Content delivery for Godot games without changing the engine or the PCK format. The player downloads only the chunks that changed, the pack is reconstructed byte-identically (SHA-256 verified) and mounted with <span class="mono">ProjectSettings.load_resource_pack()</span>. Measured updates of −67% to −70% versus downloading the full compressed PCK.</p>
+    </div>
+    <div class="cards g3" style="margin-bottom:26px;">
+      <div class="card reveal"><span class="idx">// client</span><h3>100% GDScript</h3><p><span class="mono">class_name CavsClient</span> parses the binary CVSP protocol, decompresses with Godot's native zstd, keeps a cache in <span class="mono">user://</span>, and verifies every file's SHA-256 with <span class="mono">HashingContext</span>. No GDExtension, no native binaries.</p></div>
+      <div class="card reveal" style="transition-delay:.05s"><span class="idx">// build side</span><h3>One-command release</h3><p><span class="mono">tools/pack_release.sh</span> exports the PCK headless and packages it (FastCDC 64&nbsp;KiB + zstd + optional Ed25519 signature).</p></div>
+      <div class="card reveal" style="transition-delay:.1s"><span class="idx">// runtime</span><h3>Every platform</h3><p>Because it is pure GDScript, the runtime client works on every platform Godot exports to — desktop, mobile and web.</p></div>
+    </div>
+    <p class="mono blue" style="font-size:13px; margin-bottom:10px;">Install &amp; publish</p>
+    <pre class="code"><span class="comment"># 1. copy addons/cavs/ into your project → res://addons/cavs/</span>
+<span class="comment"># 2. enable it in Project → Project Settings → Plugins</span>
+<span class="comment"># 3. build the tools once, create a signing key, publish a release:</span>
+<span class="prompt">$</span> cargo build <span class="flag">--release</span>
+<span class="prompt">$</span> cavs keygen <span class="flag">-o</span> publisher.key
+<span class="prompt">$</span> ./tools/pack_release.sh game_v2 <span class="flag">--sign</span> publisher.key</pre>
+  </div>
+</section>
+
+<!-- ============ STEAM ============ -->
+<section class="anchor" id="steam">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">SteamPipe Analyzer <span class="badge available" style="margin-left:8px;">stable</span></span>
+      <h2 class="section-title">Catch Steam update bloat<br>before your players do.</h2>
+      <p class="section-sub"><span class="mono">cavs-steam</span> compares two builds, estimates the update SteamPipe will generate, detects the pack files that cause oversized updates (reordering, offset cascades, huge packs) and recommends packaging fixes — entirely locally, uploading nothing. Estimates are a predictive model of SteamPipe's ~1&nbsp;MiB-chunk pipeline, not official Steam output.</p>
+    </div>
+    <pre class="code"><span class="prompt">$</span> cavs-steam compare ./build_v1 ./build_v2 <span class="flag">--out</span> report
+<span class="prompt">$</span> open report/index.html   <span class="comment"># + summary.md, results.json, files.csv</span>
+
+<span class="comment"># CI gate — block a PR that would ship a disproportionate update</span>
+<span class="prompt">$</span> cavs-steam ci ./prev ./current \
+    <span class="flag">--max-estimated-update</span> 500MiB <span class="flag">--max-risk</span> high</pre>
+    <div class="table-wrap reveal" style="margin-top:24px;">
+      <table>
+        <thead><tr><th>Change on a 20 MiB pack</th><th class="num">SteamPipe update</th><th class="num">CAVS (FastCDC)</th><th class="num">Risk</th></tr></thead>
+        <tbody>
+          <tr><td>Localized 200 KiB edit</td><td class="num">1.00 MiB <span class="dim">(95% reuse)</span></td><td class="num blue">257 KiB</td><td class="num">NONE</td></tr>
+          <tr><td>Insert 100 KiB at the start (reorder)</td><td class="num strike">20.10 MiB <span class="dim">(0% reuse)</span></td><td class="num blue">179 KiB</td><td class="num save">HIGH</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">The second case is what the tool exists to catch: a real 100&nbsp;KiB change that, by shifting every offset, forces Steam to re-download the whole pack — flagged with the exact cause. Exit codes: <span class="mono">0</span> ok, <span class="mono">2</span> budget/risk exceeded, <span class="mono">3</span> tool error.</p>
+  </div>
+</section>
+
+<!-- ============ ENGINES SOON ============ -->
+<section class="anchor" id="engines">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow amber">On the way</span>
+      <h2 class="section-title">Unity &amp; Unreal plugins.</h2>
+      <p class="section-sub">Both bring CAVS content delivery to their engine's native containers, reusing the Rust core over a stable C ABI. Not available yet — the Godot plugin is the reference client today.</p>
+    </div>
+    <div class="cards g2">
+      <div class="card reveal">
+        <span class="idx">// unity</span>
+        <h3>Unity plugin <span class="badge soon" style="margin-left:6px;">soon</span></h3>
+        <p>A C# <span class="mono">CavsClient</span> over CVSP for AssetBundles and Addressables, an editor post-process to package build output into <span class="mono">.cavs</span>, and a persistent runtime cache with verified reconstruction.</p>
+      </div>
+      <div class="card reveal" style="transition-delay:.05s">
+        <span class="idx">// unreal</span>
+        <h3>Unreal plugin <span class="badge soon" style="margin-left:6px;">soon</span></h3>
+        <p>A C++ runtime client over CVSP for PAK / IoStore (<span class="mono">.ucas</span> / <span class="mono">.utoc</span>), a build hook to package cooked output, and alignment-aware packaging guidance.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUICKSTART ============ -->
+<section class="anchor" id="quickstart">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Quickstart</span>
+      <h2 class="section-title">Try it locally.</h2>
+      <p class="section-sub">Run CAVS against two versions of your build and compare full download vs update payload.</p>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:22px;" class="cards">
+      <div>
+        <p class="mono" style="color:var(--blue); font-size:13px; margin-bottom:10px;">1 — Install</p>
+        <pre class="code"><span class="prompt">$</span> cargo install cavs-cli
+<span class="prompt">$</span> cargo install cavs-server
+<span class="prompt">$</span> cargo install cavs-client</pre>
+      </div>
+      <div>
+        <p class="mono" style="color:var(--blue); font-size:13px; margin-bottom:10px;">2 — Pack two versions</p>
+        <pre class="code"><span class="prompt">$</span> cavs pack <span class="flag">--raw</span> game_v1.pck \
+    <span class="flag">--profile</span> auto <span class="flag">--bootstrap</span> <span class="flag">-o</span> game_v1.cavs
+<span class="prompt">$</span> cavs pack <span class="flag">--raw</span> game_v2.pck \
+    <span class="flag">--profile</span> auto <span class="flag">--prev</span> game_v1.cavs <span class="flag">-o</span> game_v2.cavs</pre>
+      </div>
+      <div>
+        <p class="mono" style="color:var(--blue); font-size:13px; margin-bottom:10px;">3 — Serve</p>
+        <pre class="code"><span class="prompt">$</span> cavs-server game_v1.cavs game_v2.cavs \
+    <span class="flag">--listen</span> 127.0.0.1:8990</pre>
+      </div>
+      <div>
+        <p class="mono" style="color:var(--blue); font-size:13px; margin-bottom:10px;">4 — Fetch &amp; check stats</p>
+        <pre class="code"><span class="prompt">$</span> cavs-client fetch <span class="str">http://127.0.0.1:8990</span> game_v2 \
+    <span class="flag">-o</span> out/game_v2.pck <span class="flag">--cache</span> ./cache \
+    <span class="flag">--stats-json</span> stats.json
+<span class="comment"># { "delivery_mode": "chunks",</span>
+<span class="comment">#   "payload_bytes": 1719664,</span>
+<span class="comment">#   "reconstructed_sha256_ok": true }</span></pre>
+      </div>
+      <div style="grid-column:1 / -1;">
+        <p class="mono" style="color:var(--green); font-size:13px; margin-bottom:10px;">5 — Offline patch — no server (sign · preview · diff · apply · verify)</p>
+        <pre class="code"><span class="prompt">$</span> cavs signature export ./Build_v1 <span class="flag">--raw</span> <span class="flag">-o</span> build_v1.cavssig
+<span class="prompt">$</span> cavs preview ./Build_v2 <span class="flag">--against</span> build_v1.cavssig <span class="flag">--changes-only</span>
+<span class="prompt">$</span> cavs diff-plan ./Build_v1 ./Build_v2 <span class="flag">-o</span> update.cavsplan
+<span class="prompt">$</span> cavs apply <span class="flag">--old</span> ./InstalledGame <span class="flag">--plan</span> update.cavsplan <span class="flag">--inplace</span> <span class="flag">--verify</span>
+<span class="comment"># apply : OK — 6 written, 38 unchanged (no-op), 2 deleted</span>
+<span class="comment"># bytes : 20.58 MiB — 19.00 from the old install, 1.58 from the plan</span></pre>
+      </div>
+      <div style="grid-column:1 / -1;">
+        <p class="mono" style="color:var(--green); font-size:13px; margin-bottom:10px;">6 — Auto-route delivery (publish · policy · route-plan)</p>
+        <pre class="code"><span class="prompt">$</span> cavs publish-dir ./Build_v2 <span class="flag">--previous</span> ./Build_v1 <span class="flag">--out-dir</span> releases/
+<span class="prompt">$</span> cavs patch-policy <span class="flag">--versions</span> v1,...,v10 <span class="flag">--distribution</span> shares.json
+<span class="prompt">$</span> cavs route-plan <span class="flag">--installed</span> ./InstalledGame <span class="flag">--new</span> ./Build_v2 \
+    <span class="flag">--patch</span> releases/v1_to_v2.cavspatch <span class="flag">--profile</span> low-memory
+<span class="comment"># cavspatch  7.67 MiB  ram 551.67 MiB  [excluded] over the 128 MiB budget</span>
+<span class="comment"># chosen : cavsplan — 7.63 MiB over the wire, fits low-memory (40 MiB peak)</span></pre>
+      </div>
+    </div>
+    <div class="hero-cta" style="margin-top:34px;">
+      <a class="btn btn-primary" href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49l-.01-1.9c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9l-.01 2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
+        Read the full docs on GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a href="index.html" class="brand" style="font-size:18px;"><img src="assets/logo-transparent-128.png" alt="" style="width:26px;height:26px;" /> CAVS</a>
+        <p class="foot-note">Content-Addressable Verified Streaming.<br>Ship game updates that weigh what changed.</p>
+      </div>
+      <div class="foot-links">
+        <a href="https://github.com/orelvis15/cavs" target="_blank" rel="noopener">GitHub</a>
+        <a href="index.html">Home</a>
+        <a href="benchmarks.html">Benchmarks</a>
+        <a href="changelog.html">Changelog</a>
+      </div>
+    </div>
+    <p class="foot-note" style="margin-top:32px; opacity:.75;">© 2026 CAVS · Apache 2.0 licensed · Benchmarks measured on real Godot PCKs over real HTTP sessions.</p>
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
