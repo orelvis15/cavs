@@ -1,0 +1,28 @@
+{
+  "app": "my-game",
+  "branch": "public",
+  "platform": "windows",
+  "language": null,
+  "owned": [
+    "windows",
+    "demo"
+  ],
+  "from_build": "build_1001",
+  "to_build": "build_1001",
+  "depots": [
+    {
+      "depot": "windows",
+      "action": "no-op",
+      "bytes": 0,
+      "route": "none — already up to date"
+    },
+    {
+      "depot": "demo",
+      "action": "no-op",
+      "bytes": 0,
+      "route": "none — already up to date"
+    }
+  ],
+  "total_bytes": 0,
+  "note": "estimates from content indices (raw new chunk bytes, before wire compression)"
+}

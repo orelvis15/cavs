@@ -1,0 +1,88 @@
+{
+  "from": null,
+  "to": "benchF/new-split",
+  "policy": "balanced",
+  "client_state": "cold-install",
+  "chosen": "full download",
+  "reason": "256.00 MiB over the wire · ~16.00 MiB peak RAM · 0 B temp disk · policy balanced",
+  "routes": [
+    {
+      "route": "full download",
+      "available": true,
+      "network_bytes": 268435456,
+      "apply_ms": 0,
+      "build_ms": 0,
+      "peak_ram_bytes": 16777216,
+      "temp_disk_bytes": 0,
+      "disk_read_bytes": 0,
+      "exact": true,
+      "score": 2560.8,
+      "notes": "raw download, no reuse"
+    },
+    {
+      "route": "bootstrap",
+      "available": true,
+      "network_bytes": 268441680,
+      "apply_ms": 512,
+      "build_ms": 0,
+      "peak_ram_bytes": 33554432,
+      "temp_disk_bytes": 268435456,
+      "disk_read_bytes": 0,
+      "exact": false,
+      "score": 2589.819356689453,
+      "notes": "estimated (zstd-3 of the target)"
+    },
+    {
+      "route": "chunk route (warm cache)",
+      "available": false,
+      "network_bytes": 18446744073709551615,
+      "apply_ms": 0,
+      "build_ms": 0,
+      "peak_ram_bytes": 0,
+      "temp_disk_bytes": 0,
+      "disk_read_bytes": 0,
+      "exact": false,
+      "score": null,
+      "notes": "no previous install"
+    },
+    {
+      "route": "hybrid previous-artifact",
+      "available": false,
+      "network_bytes": 18446744073709551615,
+      "apply_ms": 0,
+      "build_ms": 0,
+      "peak_ram_bytes": 0,
+      "temp_disk_bytes": 0,
+      "disk_read_bytes": 0,
+      "exact": false,
+      "score": null,
+      "notes": "no previous install"
+    },
+    {
+      "route": ".cavsplan",
+      "available": false,
+      "network_bytes": 18446744073709551615,
+      "apply_ms": 0,
+      "build_ms": 0,
+      "peak_ram_bytes": 0,
+      "temp_disk_bytes": 0,
+      "disk_read_bytes": 0,
+      "exact": false,
+      "score": null,
+      "notes": "no previous install"
+    },
+    {
+      "route": "optimized sidecar (.cavspatch)",
+      "available": false,
+      "network_bytes": 18446744073709551615,
+      "apply_ms": 0,
+      "build_ms": 0,
+      "peak_ram_bytes": 0,
+      "temp_disk_bytes": 0,
+      "disk_read_bytes": 0,
+      "exact": false,
+      "score": null,
+      "notes": "no previous install"
+    }
+  ]
+}

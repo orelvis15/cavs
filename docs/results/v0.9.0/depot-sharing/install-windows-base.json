@@ -1,0 +1,19 @@
+{
+  "app": "my-game",
+  "branch": "public",
+  "platform": "windows",
+  "language": null,
+  "owned": [],
+  "from_build": null,
+  "to_build": "build_1001",
+  "depots": [
+    {
+      "depot": "windows",
+      "action": "install",
+      "bytes": 51496733,
+      "route": "bootstrap"
+    }
+  ],
+  "total_bytes": 51496733,
+  "note": "estimates from content indices (raw new chunk bytes, before wire compression)"
+}

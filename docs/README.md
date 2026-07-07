@@ -30,4 +30,30 @@
   the hot-pair policy and the O(N²) rule.
 - [DELIVERY_PLANNER.md](DELIVERY_PLANNER.md) — v0.8.0: the route planner —
   no-op/chunks/hybrid/plan/sidecar/bootstrap scored under client profiles.
+- [STEAMPIPE_STYLE_MODEL.md](STEAMPIPE_STYLE_MODEL.md) — v0.9.0: the public
+  fixed-1MiB update model — exactly what it estimates and what it does not
+  claim.
+- [STEAMPIPE_COMPARISON.md](STEAMPIPE_COMPARISON.md) — v0.9.0: the model and
+  every CAVS route measured across pack pathologies, depots, I/O and
+  many-version streams.
+- [WHY_NO_STEAM_ANALYZER_PRODUCT.md](WHY_NO_STEAM_ANALYZER_PRODUCT.md) —
+  v0.9.0: why SteamPipe-style analysis is a CAVS command family, not a
+  separate product.
+- [BUILD_UPDATE_ANALYZER.md](BUILD_UPDATE_ANALYZER.md) — v0.9.0: `bench
+  steampipe-style`, `analyze steampipe` and `publish-preview` — numbers,
+  diagnosis, decision.
+- [PACK_FILE_OPTIMIZATION.md](PACK_FILE_OPTIMIZATION.md) — v0.9.0: pack-file
+  failure modes (churn, shuffling, TOC, compression) and the layout rules
+  that fix them, measured.
+- [DEPOTS_BRANCHES_WORKSPACE.md](DEPOTS_BRANCHES_WORKSPACE.md) — v0.9.0: the
+  local app/depot/branch/build workspace, sharing analysis and install-plan
+  simulation.
+- [ROUTE_PLANNER.md](ROUTE_PLANNER.md) — v0.9.0: `plan-update` — routes
+  scored under explicit policies (network/CPU/RAM/disk) per client state.
+- [IO_ESTIMATOR.md](IO_ESTIMATOR.md) — v0.9.0: local disk I/O per route with
+  configurable device profiles; why small downloads can still be slow.
+- [LOCAL_CONTENT_SERVER.md](LOCAL_CONTENT_SERVER.md) — v0.9.0: `cavs serve` —
+  the development-only workspace server (branches, depots, chunks, ranges).
+- [GODOT_PCK_ANALYZER.md](GODOT_PCK_ANALYZER.md) — v0.9.0: PCK-aware
+  analysis that maps changed bytes back to `res://` paths.
 - [PAPER.md](PAPER.md) — the technical paper: design, rationale, and results.

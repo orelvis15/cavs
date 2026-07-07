@@ -1,0 +1,103 @@
+{
+  "old": "content/Build_v1",
+  "new": "content/Build_v2",
+  "steampipe_style": {
+    "network_bytes": 6046968,
+    "new_or_changed_chunks": 15,
+    "rebuild_read_bytes": 30749501,
+    "rebuild_write_bytes": 32125796
+  },
+  "routes": {
+    "mode": "directory",
+    "old": "content/Build_v1",
+    "new": "content/Build_v2",
+    "old_size_bytes": 51196733,
+    "new_size_bytes": 51655524,
+    "routes": [
+      {
+        "route": "full download (raw)",
+        "network_bytes": 51655524,
+        "diff_ms": null,
+        "apply_ms": 0,
+        "peak_rss_mib": null,
+        "output_ok": true,
+        "notes": "no old-version reuse"
+      },
+      {
+        "route": "full zstd-19 (CAVS bootstrap)",
+        "network_bytes": 24407555,
+        "diff_ms": 1221,
+        "apply_ms": 8,
+        "peak_rss_mib": null,
+        "output_ok": true,
+        "notes": "cache-less first install"
+      },
+      {
+        "route": "CAVS chunk / hybrid (wire)",
+        "network_bytes": 2185594,
+        "diff_ms": 102,
+        "apply_ms": null,
+        "peak_rss_mib": null,
+        "output_ok": true,
+        "notes": "37 of 437 chunks new; same bytes for warm cache or cold cache + previous install (hybrid)"
+      },
+      {
+        "route": "CAVS offline plan (.cavsplan)",
+        "network_bytes": 1060543,
+        "diff_ms": 175,
+        "apply_ms": 125,
+        "peak_rss_mib": null,
+        "output_ok": true,
+        "notes": "portable patch: signature diff + zstd-19 payload, journaled apply"
+      },
+      {
+        "route": "pairwise proxy: bsdiff+zstd-19",
+        "network_bytes": 1257524,
+        "diff_ms": 10355,
+        "apply_ms": 3303,
+        "peak_rss_mib": 556.203125,
+        "output_ok": true,
+        "notes": "one exact old→new pair only (proxy)"
+      },
+      {
+        "route": "pairwise proxy: bsdiff+brotli-9",
+        "network_bytes": 1257770,
+        "diff_ms": 10355,
+        "apply_ms": 3303,
+        "peak_rss_mib": 556.203125,
+        "output_ok": true,
+        "notes": "one exact old→new pair only (proxy)"
+      },
+      {
+        "route": "pairwise proxy: xdelta3+zstd-19",
+        "network_bytes": 1251476,
+        "diff_ms": 3780,
+        "apply_ms": 3644,
+        "peak_rss_mib": 233.3125,
+        "output_ok": true,
+        "notes": "one exact old→new pair only (proxy)"
+      },
+      {
+        "route": "pairwise proxy: xdelta3+brotli-9",
+        "network_bytes": 1251059,
+        "diff_ms": 3780,
+        "apply_ms": 3644,
+        "peak_rss_mib": 233.3125,
+        "output_ok": true,
+        "notes": "one exact old→new pair only (proxy)"
+      }
+    ],
+    "skipped": [
+      "butler offline: CAVS-E-BUTLER-NOT-FOUND: cannot execute \"butler\"; pass --butler-bin or install butler",
+      "pairwise patches serve exactly one old→new pair; storage and generation cost grow with every published pair"
+    ]
+  },
+  "recommended": "CAVS offline plan (.cavsplan)",
+  "reason": "lowest verified network payload (1.01 MiB) · streaming apply with bounded memory · no pairwise O(N²) patch explosion · byte-identical output verified",
+  "warnings": [
+    "route skipped: butler offline: CAVS-E-BUTLER-NOT-FOUND: cannot execute \"butler\"; pass --butler-bin or install butler",
+    "route skipped: pairwise patches serve exactly one old→new pair; storage and generation cost grow with every published pair",
+    "[critical] Assets shifted or reordered inside the file (game.pck) — Keep a stable asset order, pad or align entries so unrelated assets keep their offsets, and avoid full repacks for small changes."
+  ],
+  "note": "SteamPipe-style estimate based on public documentation. This is not Valve's exact SteamPipe implementation."
+}

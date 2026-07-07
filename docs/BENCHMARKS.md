@@ -353,6 +353,61 @@ Full tables: [ROUTE_BENCHMARKS.md](ROUTE_BENCHMARKS.md); planner:
 [DELIVERY_PLANNER.md](DELIVERY_PLANNER.md); sidecar format and policy:
 [PAIRWISE_SIDECARS.md](PAIRWISE_SIDECARS.md).
 
+## SteamPipe-class analysis (v0.9.0)
+
+v0.9.0 turns CAVS into a build-update lab: a SteamPipe-style
+fixed-1MiB update model (`cavs bench steampipe-style`), the layout
+analyzer (`cavs analyze steampipe`, `analyze-packs`), publish previews,
+a local disk I/O estimator, a policy route planner and the local
+app/depot/branch/build workspace. Every SteamPipe-style figure is a
+public-model **estimate**, never Valve's implementation
+([STEAMPIPE_STYLE_MODEL.md](STEAMPIPE_STYLE_MODEL.md)). Raw outputs:
+[results/v0.9.0/](results/v0.9.0/).
+
+**A/B — pack pathology (32 × ~1 MiB assets):** the same 64 KiB of real
+change costs **1.00 MiB** (localized), **1.88 MiB** (TOC at the end) or
+**the whole 32.88 MiB pack** (shifted / shuffled / distributed-TOC)
+under the fixed model. The CAVS `.cavsplan` for the shifted pack is
+**7.4 KiB** — content-defined chunking is immune to offset cascades,
+with no per-pair patch. The analyzer diagnoses each case
+(`asset_shuffling`, `toc_churn`) and its fix; applying the fixes
+(centralized TOC, padded per-asset compression) recovers 94% / 75%
+fixed reuse.
+
+**C — directory vs blob:** the same assets as individual files cost
+1.00 MiB — layout-equivalent to the best pack, with per-file staged
+applies.
+
+**D — depot sharing:** windows ↔ linux depots share **98.9%** of their
+bytes; install plans price ownership/platform/language per depot, and a
+demo owner with the full build installed downloads **0 B**
+(cross-depot chunk reuse).
+
+**E — many-version stream (10 × 24 MiB):** the content-addressed store
+holds all 10 versions in **22.43 MiB** and serves any jump
+(v1→v10: 6.58 MiB) with no extra server work; direct pairwise coverage
+would need 45 patches.
+
+**F — local disk I/O:** a ~3-byte change in a 256 MiB pack downloads
+2 MiB but costs **512 MiB of local I/O** — on an HDD (4.7 s) that is
+*slower* than the raw 256 MiB full download (2.6 s). Splitting the pack
+into 8 parts cuts it to 128 MiB (1.2 s). `cavs io-estimate` flags when
+I/O dominates the network saving.
+
+**G — Godot PCK:** one edited resource costs 1.00 MiB (model) vs
+128 KiB (CAVS plan); a resource packed in front shifts everything —
+3.50 MiB vs 1.06 MiB — and `cavs analyze godot-pck` names the exact
+`res://` paths behind the churn.
+
+**H — route planner:** `cavs plan-update` picks `.cavsplan` (129 KiB)
+for every previous-install state and honestly picks the raw full
+download for a cold install of incompressible data (a bootstrap would
+save nothing). Unavailable routes are never chosen.
+
+Summary tables: [STEAMPIPE_COMPARISON.md](STEAMPIPE_COMPARISON.md);
+analyzer guide: [BUILD_UPDATE_ANALYZER.md](BUILD_UPDATE_ANALYZER.md);
+layout rules: [PACK_FILE_OPTIMIZATION.md](PACK_FILE_OPTIMIZATION.md).
+
 ## Honest negatives (video suite)
 
 CAVS is not a codec and doesn't pretend to be:
