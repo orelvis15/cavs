@@ -57,4 +57,22 @@ publishing {
             }
         }
     }
+    repositories {
+        // Target repository is supplied by the release workflow (Maven
+        // Central portal, GitHub Packages, or any Maven repo). When unset,
+        // only `publishToMavenLocal` is usable.
+        val repoUrl = providers.gradleProperty("mavenRepoUrl")
+            .orElse(providers.environmentVariable("MAVEN_REPO_URL"))
+        if (repoUrl.isPresent && repoUrl.get().isNotBlank()) {
+            maven {
+                url = uri(repoUrl.get())
+                credentials {
+                    username = providers.gradleProperty("mavenRepoUser")
+                        .orElse(providers.environmentVariable("MAVEN_REPO_USER")).orNull
+                    password = providers.gradleProperty("mavenRepoPassword")
+                        .orElse(providers.environmentVariable("MAVEN_REPO_PASSWORD")).orNull
+                }
+            }
+        }
+    }
 }

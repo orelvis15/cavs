@@ -27,6 +27,13 @@
   "dependencies": {
     "koffi": "^2.9.0"
   },
+  "optionalDependencies": {
+    "@cavs/sdk-linux-x64": "1.1.0",
+    "@cavs/sdk-linux-arm64": "1.1.0",
+    "@cavs/sdk-darwin-x64": "1.1.0",
+    "@cavs/sdk-darwin-arm64": "1.1.0",
+    "@cavs/sdk-win32-x64": "1.1.0"
+  },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "typescript": "^5.5.0"
