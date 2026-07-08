@@ -79,10 +79,14 @@ Reading the table:
   transmitted 462.95 MiB — *worse than downloading the whole thing*. Block
   checksums aren't built for this.
 - **xdelta3/bsdiff produce the smallest patches** for a single version pair —
-  but you need one patch per pair (v1→v5, v2→v5, v3→v5…, O(N²)), and generating
-  the bsdiff patch for tps-demo cost **137 s and 9.1 GB of RAM**. CAVS packs
-  **once per release (3.5 s)** and the same chunk store serves any version
-  jump, with resumable, CDN-cacheable, cross-version reuse.
+  and generating the bsdiff patch for tps-demo cost **137 s and 9.1 GB of
+  RAM**. Serving *every* old→new jump as one direct patch needs an all-pairs
+  graph (O(N²) patches); practical systems use adjacent diffs, sparse
+  ladders, base-version or hot-pair policies instead, each trading storage
+  for chain length — the [patch policy benchmark](#pairwise-patch-policy-benchmark)
+  measures those directly. CAVS packs **once per release (3.5 s)** and the
+  same chunk store serves any version jump, with resumable, CDN-cacheable,
+  cross-version reuse.
 
 ## Parameter sweeps
 
@@ -297,7 +301,7 @@ output. `cavs preview` warns about this shape; publish folders, not archives.
 | Method | Storage | Adjacent updates | v1→v10 jump | Any-pair coverage |
 |---|---:|---:|---:|---|
 | CAVS packfile store | **30.60 MiB** (10 packs) | 13.70 MiB total | 8.95 MiB | every pair, same objects |
-| bsdiff patches | 4.23 MiB (9 adjacent) + full artifacts | 4.23 MiB total | 3.60 MiB (dedicated) | needs 45 patches (O(N²)) or chain-apply |
+| bsdiff patches | 4.23 MiB (9 adjacent) + full artifacts | 4.23 MiB total | 3.60 MiB (dedicated) | all-pairs one-hop needs 45 patches; practical policies chain or budget instead |
 
 Per-pair, bsdiff is smaller — expected and fine. The store-once model wins on
 the operational axis: ten versions fit in less space than one raw build, and
@@ -335,8 +339,10 @@ through xdelta3: CAVS auto-route **2.53 MiB** (was 21.9 MiB through
 block routes), 13% below butler optimized (2.90 MiB).
 
 **D — many-version storage (10 × 32 MiB):** CAVS store + 3 policy-chosen
-hot-pair sidecars = **35.91 MiB** serving any jump; all-pairs bsdiff
-coverage = 144.23 MiB in 45 patches — **75% less storage**, no O(N²).
+hot-pair sidecars = **35.91 MiB** serving any jump; all-pairs one-hop bsdiff
+coverage = 144.23 MiB in 45 patches — **75% less storage**. (All-pairs is
+the theoretical one-hop baseline, not how pairwise systems normally deploy;
+v1.1.0's patch policy benchmark compares the practical policies too.)
 
 **E — low-memory apply (256 MiB build):** a bsdiff sidecar applies with
 **517 MiB real RSS**; under `--memory-budget 128MiB` CAVS refuses it up
@@ -408,6 +414,89 @@ Summary tables: [STEAMPIPE_COMPARISON.md](STEAMPIPE_COMPARISON.md);
 analyzer guide: [BUILD_UPDATE_ANALYZER.md](BUILD_UPDATE_ANALYZER.md);
 layout rules: [PACK_FILE_OPTIMIZATION.md](PACK_FILE_OPTIMIZATION.md).
 
+## Pairwise patch policy benchmark (v1.1.0)
+
+Earlier versions of this document described all-pairs pairwise diffs as
+O(N²). That is true for a theoretical one-hop patch graph, but practical
+systems usually use adjacent diffs, sparse ladders, base-version
+policies, or selected hot pairs. This section compares CAVS against
+those policies directly: `cavs bench patch-policy` on the deterministic
+10-version stream (`cavs bench gen-stream`, 32 MiB per version, ~3%
+drift per release), every pairwise number a real diff, applied and
+byte-verified. Full harness: [PATCH_POLICY_BENCHMARK.md](PATCH_POLICY_BENCHMARK.md).
+
+### Policies tested
+
+| Policy | Patch count | Best use case |
+|---|---:|---|
+| Adjacent | N−1 | users update every version |
+| Ladder | <2N | skipped versions, bounded chains |
+| Base hub | 2(N−1) | major baseline workflows |
+| Hot pairs | budgeted | traffic-driven optimization |
+| All-pairs | N² | theoretical one-hop lower bound |
+| CAVS | content store | route-planned cache/hybrid updates |
+
+### Results — `adjacent-heavy` traffic (80% adjacent, 15% skip 2–4, 4% old→latest, 1% reinstall; cold cache + previous install)
+
+| Policy | Patches | Storage | Avg update | P95 update | Max steps | Build time |
+|---|---:|---:|---:|---:|---:|---:|
+| Adjacent | 9 | **4.20 MiB** | 891 KiB | 2.00 MiB | 9 | 0.8 s |
+| Ladder (aligned) | 16 | 14.59 MiB | 877 KiB | 1.88 MiB | 4 | 1.9 s |
+| Base hub (v06, auto) | 18 | 21.41 MiB | 2.12 MiB | 3.76 MiB | 2 | 2.3 s |
+| Hot pairs (latest:3, 2×-build budget) | 11 | 6.39 MiB | 888 KiB | 2.00 MiB | 7 | 1.1 s |
+| All-pairs (theoretical one-hop) | 45 | 70.49 MiB | **867 KiB** | **1.82 MiB** | **1** | 7.6 s |
+| CAVS | content store | 29.84 MiB | 2.26 MiB | 5.12 MiB | **1** | **0.4 s** |
+
+### Results — `skip-heavy` traffic (40% adjacent, 40% skip 2–8, 15% old→latest, 5% reinstall; bsdiff engine)
+
+| Policy | Storage | Avg update | P95 update | Max steps | Build time |
+|---|---:|---:|---:|---:|---:|
+| Adjacent | **4.23 MiB** | 2.28 MiB | 4.23 MiB | 9 | 63 s |
+| Ladder (aligned) | 14.71 MiB | 2.22 MiB | 3.79 MiB | 5 | 126 s |
+| Base hub (v06) | 21.59 MiB | 2.94 MiB | 3.91 MiB | 2 | 149 s |
+| Hot pairs (latest:3) | 6.44 MiB | 2.27 MiB | 4.17 MiB | 8 | 80 s |
+| All-pairs (theoretical one-hop) | 71.07 MiB | **2.17 MiB** | **3.60 MiB** | 2 | 455 s |
+| CAVS | 29.84 MiB | 4.60 MiB | 8.95 MiB | **1** | **0.4 s** |
+
+### Per-query examples (cavsplan engine)
+
+| From | To | Adjacent | Ladder | Base | All-pairs | CAVS |
+|---|---|---:|---:|---:|---:|---:|
+| v01 | v02 | 513 KiB / 1 step | 513 KiB / 1 | 3.76 MiB / 2 | 513 KiB / 1 | 1.69 MiB / 1 |
+| v01 | v10 | 4.20 MiB / 9 steps | 3.76 MiB / 2 | 3.88 MiB / 2 | 3.57 MiB / 1 | 8.95 MiB / 1 |
+
+Reading the numbers honestly:
+
+- **Adjacent diffs win storage and per-update bytes for users who update
+  every release** — that is their design point, and the benchmark
+  confirms it. The cost is chains: 9 sequential applies for v01→v10,
+  every intermediate patch must exist and apply cleanly.
+- **The ladder is the strongest practical pairwise baseline here**: near
+  adjacent-level bytes with chains bounded at 4–5 steps for 3.5× the
+  storage.
+- **All-pairs is the byte/steps optimum and the storage/build
+  pathology** — 70 MiB of patches and 455 s of bsdiff build time for ten
+  32 MiB versions. It stays in the table as the labeled theoretical
+  baseline, not as "pairwise diffs".
+- **CAVS trades per-pair bytes for operational properties**: one apply
+  step for any jump, 0.4 s of build (pack once, no per-pair work),
+  reinstalls served from the same store, cache/hybrid reuse, and no
+  patch graph to host or expire. Under skip-heavy traffic its worst case
+  (8.95 MiB, the v01→v10 cold jump) is bounded by the store — a client
+  never chains.
+- Exact pairwise patches on this dataset are ~2–4× smaller than the
+  CAVS chunk route for the same pair (e.g. 3.57 vs 8.95 MiB for
+  v01→v10) — consistent with every earlier per-pair comparison in this
+  document. Policy-level costs (chains, storage, build, coverage) are
+  the context those per-pair numbers were missing.
+
+Raw reports (summary, per-edge CSV, per-query CSV, storage/traffic/
+apply-chain reports, replayable `patch_graph.json`):
+[results/v1.1.0/patch-policy/](results/v1.1.0/patch-policy/). Replay a
+different traffic model or client state without re-diffing:
+`cavs patch-policy simulate --graph …/patch_graph.json --traffic-model
+major-release`.
+
 ## Honest negatives (video suite)
 
 CAVS is not a codec and doesn't pretend to be:
@@ -427,7 +516,12 @@ CAVS is not a codec and doesn't pretend to be:
 The synthetic large-build suite is fully reproducible from this tree:
 `cavs bench gen --out ds --size 1GiB && cavs bench suite --dataset ds --out
 results` regenerates the exact same dataset (deterministic PRNG) and writes
-`summary.md`/`summary.json`. The real-game harnesses (`cavs-bench`, the
+`summary.md`/`summary.json`. The patch policy benchmark reproduces the same
+way: `cavs bench gen-stream --out builds --versions 10 --size 32MiB` then
+`cavs bench patch-policy --versions-dir builds --version-glob 'v*'
+--traffic-model adjacent-heavy --hot-pairs latest:3 --patch-storage-budget
+2x-latest-build --out results/patch-policy` (bsdiff/xdelta3 columns appear
+when the tools are installed; missing tools are skipped, never fatal). The real-game harnesses (`cavs-bench`, the
 real-games scripts) and their raw result data live in the full development
 repository, not in this open-source tree; the measured summaries above are
 what those harnesses produced.
