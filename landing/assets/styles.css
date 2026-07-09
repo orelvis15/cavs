@@ -612,6 +612,9 @@ footer {
   .nav-links { gap: 18px; }
   .nav-links .nav-page { display: none; }
   .nav-links .nav-page.in-menu { display: block; }
+  /* collapse theme toggle + Star button into the burger menu so the bar fits */
+  .nav-links > .theme-toggle, .nav-links > .btn { display: none; }
+  .nav-links.open > .theme-toggle, .nav-links.open > .btn { display: inline-flex; }
   .nav-links.open {
     display: flex; flex-direction: column; align-items: flex-start; position: absolute; top: 100%; left:0; right:0;
     background: var(--bg-2); border-bottom: 1px solid var(--border); padding: 18px 24px; gap: 16px;
@@ -620,12 +623,31 @@ footer {
   .burger { display: block; }
   .cmd-row { grid-template-columns: 1fr; gap: 6px; }
 }
+/* Mobile: stop grid blowout and text overflow.
+   Several containers use display:grid with 1fr/auto tracks (some set inline via
+   style="grid-template-columns:…", hence !important). A grid item's default
+   min-width:auto lets wide content — terminals (white-space:pre), long paths,
+   code — force the track wider than the viewport, which on mobile expands the
+   layout viewport and shrinks the whole page. minmax(0,1fr) + min-width:0 lets
+   the tracks shrink so that content wraps or scrolls inside its own box. */
+@media (max-width: 760px) {
+  .what-grid, .cards, .hero-grid, .steps {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 28px !important;
+  }
+  .cl-body ul, .cmd-list, .cmd-row, ul.bullets { grid-template-columns: minmax(0, 1fr); }
+  .what-grid > *, .cards > *, .hero-grid > *, .steps > *,
+  .cl-body li, .cmd-row > *, .cmd-list > * { min-width: 0; }
+}
 @media (max-width: 620px) {
   .proof { grid-template-columns: 1fr 1fr; }
   .g2 { grid-template-columns: 1fr; }
   section { padding: 66px 0; }
   body { font-size: 16px; }
   .cl-ver h2, .cl-ver .cl-title { font-size: 19px; }
+  /* break long tokens (paths, URLs) instead of overflowing the narrow column */
+  p, li, .section-sub, .lead, .cmd-desc, .cl-body li { overflow-wrap: break-word; }
+  .cmd-row code, .mono, .cl-body code { overflow-wrap: anywhere; }
 }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity:1; transform:none; transition:none; }
