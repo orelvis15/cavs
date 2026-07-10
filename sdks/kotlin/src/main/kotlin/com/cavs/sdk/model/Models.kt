@@ -251,3 +251,31 @@ data class SavingsReport(
     val estimatedMonthlySavings: Double = 0.0,
     val savingsPercent: Double = 0.0,
 )
+
+@Serializable
+data class FetchStaticRequest(
+    /** Base URL or local directory of the static export. */
+    val base: String,
+    /** Asset name (the `<name>` under `assets/<name>/`). */
+    val asset: String,
+    /** Output directory for the reconstructed build. */
+    val outputDir: String,
+    /** Persistent content-addressable cache directory. */
+    val cacheDir: String,
+    /** Concurrent range requests (default 8). */
+    val connections: Int? = null,
+    /** Optional Ed25519 public key (64 hex) to enforce the content signature. */
+    val pubkey: String? = null,
+)
+
+@Serializable
+data class FetchStaticResult(
+    val asset: String = "",
+    val outputDir: String = "",
+    val wireBytes: Long = 0,
+    val rawBytes: Long = 0,
+    val chunksFetched: Long = 0,
+    val chunksReused: Long = 0,
+    val logicalBytes: Long = 0,
+    val savedPercent: Double = 0.0,
+)

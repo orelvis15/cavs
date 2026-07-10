@@ -201,3 +201,12 @@ func (c *Client) EstimateSavings(ctx context.Context, req SavingsRequest, opts .
 	var out SavingsReport
 	return &out, c.execute(ctx, "estimateSavings", req, &out, opts)
 }
+
+// FetchStatic installs or updates a build straight from a static export
+// (cavs store export --static-plans) with no cavs-server — the embeddable
+// self-update path. It downloads only the chunks the local cache lacks, via
+// concurrent HTTP Range requests, verified end to end.
+func (c *Client) FetchStatic(ctx context.Context, req FetchStaticRequest, opts ...CallOption) (*FetchStaticResult, error) {
+	var out FetchStaticResult
+	return &out, c.execute(ctx, "fetchStatic", req, &out, opts)
+}

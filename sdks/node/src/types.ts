@@ -224,3 +224,29 @@ export interface SavingsReport {
   estimatedMonthlySavings: number;
   savingsPercent: number;
 }
+
+export interface FetchStaticRequest {
+  /** Base URL or local directory of the static export. */
+  base: string;
+  /** Asset name (the `<name>` under `assets/<name>/`). */
+  asset: string;
+  /** Output directory for the reconstructed build. */
+  outputDir: string;
+  /** Persistent content-addressable cache directory. */
+  cacheDir: string;
+  /** Concurrent range requests (default 8). */
+  connections?: number;
+  /** Optional Ed25519 public key (64 hex) to enforce the content signature. */
+  pubkey?: string;
+}
+
+export interface FetchStaticResult {
+  asset: string;
+  outputDir: string;
+  wireBytes: number;
+  rawBytes: number;
+  chunksFetched: number;
+  chunksReused: number;
+  logicalBytes: number;
+  savedPercent: number;
+}

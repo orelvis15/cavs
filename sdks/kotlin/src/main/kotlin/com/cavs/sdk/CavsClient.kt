@@ -97,6 +97,15 @@ class CavsClient private constructor(private val bridge: NativeBridge) : AutoClo
     fun estimateSavings(request: SavingsRequest): SavingsReport =
         call("estimateSavings", request, null)
 
+    /**
+     * Install or update a build straight from a static export
+     * (`cavs store export --static-plans`) with no cavs-server — the
+     * embeddable self-update path. Downloads only the chunks the local cache
+     * lacks, via concurrent HTTP Range requests, verified end to end.
+     */
+    fun fetchStatic(request: FetchStaticRequest, progress: ((ProgressEvent) -> Unit)? = null): FetchStaticResult =
+        call("fetchStatic", request, progress)
+
     // ---- Asynchronous operations ----
 
     fun previewAsync(request: PreviewRequest): CompletableFuture<PreviewReport> =
@@ -107,6 +116,9 @@ class CavsClient private constructor(private val bridge: NativeBridge) : AutoClo
 
     fun applyPlanAsync(request: ApplyPlanRequest): CompletableFuture<ApplyResult> =
         CompletableFuture.supplyAsync({ applyPlan(request) }, executor)
+
+    fun fetchStaticAsync(request: FetchStaticRequest): CompletableFuture<FetchStaticResult> =
+        CompletableFuture.supplyAsync({ fetchStatic(request) }, executor)
 
     override fun close() {
         synchronized(lock) {

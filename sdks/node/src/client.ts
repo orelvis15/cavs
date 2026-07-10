@@ -17,6 +17,8 @@ import type {
   ProgressEvent,
   SavingsReport,
   SavingsRequest,
+  FetchStaticRequest,
+  FetchStaticResult,
   VerifyRequest,
   VerifyResult,
 } from "./types";
@@ -97,6 +99,16 @@ export class CavsClient {
 
   estimateSavings(req: SavingsRequest, opts?: CallOptions): Promise<SavingsReport> {
     return this.call("estimateSavings", req, opts);
+  }
+
+  /**
+   * Install or update a build straight from a static export
+   * (`cavs store export --static-plans`) with no cavs-server — the embeddable
+   * self-update path. Downloads only the chunks the local cache lacks, via
+   * concurrent HTTP Range requests, verified end to end.
+   */
+  fetchStatic(req: FetchStaticRequest, opts?: CallOptions): Promise<FetchStaticResult> {
+    return this.call("fetchStatic", req, opts);
   }
 
   /** Serialize calls onto one native context. */

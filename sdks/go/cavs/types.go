@@ -239,3 +239,32 @@ type SavingsReport struct {
 	EstimatedMonthlySavings float64 `json:"estimatedMonthlySavings"`
 	SavingsPercent          float64 `json:"savingsPercent"`
 }
+
+// ---- FetchStatic ----
+
+// FetchStaticRequest installs/updates a build from a static export.
+type FetchStaticRequest struct {
+	// Base is the URL or local directory of the static export.
+	Base string `json:"base"`
+	// Asset is the asset name (the <name> under assets/<name>/).
+	Asset string `json:"asset"`
+	// OutputDir is where the reconstructed build is written.
+	OutputDir string `json:"outputDir"`
+	// CacheDir is the persistent content-addressable cache directory.
+	CacheDir string `json:"cacheDir"`
+	// Connections is the number of concurrent range requests (0 = default 8).
+	Connections int `json:"connections,omitempty"`
+	// Pubkey optionally enforces the Ed25519 content signature (64 hex).
+	Pubkey string `json:"pubkey,omitempty"`
+}
+
+type FetchStaticResult struct {
+	Asset         string  `json:"asset"`
+	OutputDir     string  `json:"outputDir"`
+	WireBytes     uint64  `json:"wireBytes"`
+	RawBytes      uint64  `json:"rawBytes"`
+	ChunksFetched uint64  `json:"chunksFetched"`
+	ChunksReused  uint64  `json:"chunksReused"`
+	LogicalBytes  uint64  `json:"logicalBytes"`
+	SavedPercent  float64 `json:"savedPercent"`
+}
