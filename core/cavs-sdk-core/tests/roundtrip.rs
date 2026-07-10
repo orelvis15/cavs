@@ -167,6 +167,84 @@ fn pack_respects_ignore_patterns() {
     assert!(pack["entriesIgnored"].as_u64().unwrap() >= 1);
 }
 
+/// `fetchStatic` is registered, reaches the fetch engine (not the
+/// unknown-operation path), and reconstructs a build from a hand-built
+/// static tree through the JSON envelope — the operation a launcher/game
+/// embeds to self-update.
+#[test]
+fn fetch_static_op_reconstructs_from_static_tree() {
+    use cavs_hash::{hash_chunk, to_hex};
+
+    // It must appear in the advertised capabilities.
+    let caps: Value = serde_json::from_str(&cavs_sdk_core::capabilities_json()).unwrap();
+    assert!(caps["features"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f == "fetchStatic"));
+
+    let tmp = tempfile::tempdir().unwrap();
+    let tree = tmp.path().join("dist");
+
+    // One raw file = two chunks laid uncompressed into a minimal pack.
+    let c0 = vec![9u8; 20_000];
+    let mut c1 = vec![0u8; 20_000];
+    let mut s = 7u32;
+    for b in c1.iter_mut() {
+        s = s.wrapping_mul(1664525).wrapping_add(1013904223);
+        *b = (s >> 24) as u8;
+    }
+    let mut pack = b"CAVSPK1\0\x01\x00\x00\x00\x00\x00\x00\x00".to_vec();
+    let mut entries = Vec::new();
+    for c in [&c0, &c1] {
+        let off = pack.len() as u64;
+        entries.push(json!({
+            "hash": to_hex(&hash_chunk(c)), "len_raw": c.len() as u32,
+            "len_stored": c.len() as u32, "flags": 0,
+            "pack": "chunks/packs/00/p.cavspack", "pack_offset_abs": off,
+        }));
+        pack.extend_from_slice(c);
+    }
+    fs::create_dir_all(tree.join("chunks/packs/00")).unwrap();
+    fs::write(tree.join("chunks/packs/00/p.cavspack"), &pack).unwrap();
+    fs::create_dir_all(tree.join("assets/game")).unwrap();
+    let manifest = json!({
+        "asset": "game", "asset_uuid": "0".repeat(32),
+        "tracks": [{ "track_id": 0, "kind": "data", "codec": "raw",
+                     "name": "game.bin", "timescale": 0, "init_chunks": [] }],
+        "segments": [{ "segment_id": 0, "track_id": 0, "pts_start": 0,
+                       "duration": 0, "random_access": true,
+                       "chunks": [ {"hash": to_hex(&hash_chunk(&c0)), "len": c0.len()},
+                                   {"hash": to_hex(&hash_chunk(&c1)), "len": c1.len()} ] }],
+        "dict": [], "chunk_table": [], "merkle_root": "",
+        "signature": null, "signer_pubkey": null, "meta": [["payload","raw"]],
+    });
+    fs::write(
+        tree.join("assets/game/manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        tree.join("assets/game/chunk-map.json"),
+        serde_json::to_vec(&json!({"asset":"game","chunks":entries})).unwrap(),
+    )
+    .unwrap();
+
+    let out = tmp.path().join("install");
+    let cache = tmp.path().join("cache");
+    let data = ok_data(
+        "fetchStatic",
+        json!({
+            "base": tree, "asset": "game",
+            "outputDir": out, "cacheDir": cache, "connections": 2
+        }),
+    );
+    assert_eq!(data["chunksFetched"].as_u64().unwrap(), 2);
+    let mut full = c0.clone();
+    full.extend_from_slice(&c1);
+    assert_eq!(fs::read(out.join("game.bin")).unwrap(), full);
+}
+
 fn assert_files_equal(a: &Path, b: &Path) {
     let mut checked = 0;
     for entry in walkdir(a) {

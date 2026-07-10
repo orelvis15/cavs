@@ -62,6 +62,7 @@ pub const OPERATIONS: &[&str] = &[
     "verifyInstall",
     "benchmark",
     "estimateSavings",
+    "fetchStatic",
 ];
 
 /// Capability descriptor, returned by [`capabilities_json`] and the FFI's
@@ -106,6 +107,7 @@ pub fn dispatch(
         "verifyInstall" => ops::verify::run(&ctx, data),
         "benchmark" => ops::benchmark::run(&ctx, data),
         "estimateSavings" => ops::savings::run(&ctx, data),
+        "fetchStatic" => ops::fetch::run(&ctx, data),
         other => Err(SdkError::UnknownOperation(other.to_string())),
     };
     match &result {

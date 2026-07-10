@@ -370,6 +370,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cavs-fetch"
+version = "1.3.0"
+dependencies = [
+ "anyhow",
+ "cavs-hash",
+ "cavs-proto",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "ureq",
+ "zstd",
+]
+
+[[package]]
 name = "cavs-ffi"
 version = "1.3.0"
 dependencies = [
@@ -449,6 +465,7 @@ dependencies = [
  "anyhow",
  "cavs-analyzer",
  "cavs-chunker",
+ "cavs-fetch",
  "cavs-format",
  "cavs-hash",
  "cavs-manifest",

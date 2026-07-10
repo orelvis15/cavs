@@ -1,0 +1,25 @@
+[package]
+name = "cavs-fetch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Embeddable serverless/CDN fetch engine for CAVS: plan, download by hash and reconstruct game builds from a static export, with progress and cancellation."
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cavs", "cdn", "fetch", "updater", "dedup"]
+categories = ["game-development"]
+
+[dependencies]
+cavs-hash = { workspace = true }
+cavs-proto = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ureq = { workspace = true }
+zstd = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

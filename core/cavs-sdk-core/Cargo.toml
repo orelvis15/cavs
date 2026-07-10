@@ -17,6 +17,7 @@ cavs-signature = { workspace = true }
 cavs-plan = { workspace = true }
 cavs-analyzer = { workspace = true }
 cavs-proto = { workspace = true }
+cavs-fetch = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

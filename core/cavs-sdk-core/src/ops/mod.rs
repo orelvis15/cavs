@@ -5,6 +5,7 @@
 pub mod analyze;
 pub mod apply;
 pub mod benchmark;
+pub mod fetch;
 pub mod pack;
 pub mod plan;
 pub mod preview;
