@@ -25,11 +25,18 @@ pub const NORM_TIGHT: u8 = 3;
 /// Chunking strategy. Sizes are in bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChunkMode {
-    Fixed { size: usize },
+    Fixed {
+        size: usize,
+    },
     /// FastCDC content-defined chunking. `norm` is the normalization level
     /// (0–3, see [`NORM_DEFAULT`]); it changes boundary placement, so it is
     /// as much a part of the profile as the sizes are.
-    Cdc { min: usize, avg: usize, max: usize, norm: u8 },
+    Cdc {
+        min: usize,
+        avg: usize,
+        max: usize,
+        norm: u8,
+    },
 }
 
 impl ChunkMode {
@@ -83,7 +90,12 @@ pub fn split(input: &[u8], mode: ChunkMode) -> Vec<Range<usize>> {
             }
             out
         }
-        ChunkMode::Cdc { min, avg, max, norm } => {
+        ChunkMode::Cdc {
+            min,
+            avg,
+            max,
+            norm,
+        } => {
             let level = match norm {
                 0 => fastcdc::v2020::Normalization::Level0,
                 1 => fastcdc::v2020::Normalization::Level1,
@@ -91,11 +103,7 @@ pub fn split(input: &[u8], mode: ChunkMode) -> Vec<Range<usize>> {
                 _ => fastcdc::v2020::Normalization::Level3,
             };
             let chunker = fastcdc::v2020::FastCDC::with_level(
-                input,
-                min as u32,
-                avg as u32,
-                max as u32,
-                level,
+                input, min as u32, avg as u32, max as u32, level,
             );
             chunker.map(|c| c.offset..c.offset + c.length).collect()
         }
@@ -204,8 +212,18 @@ mod tests {
             state = state.wrapping_mul(1664525).wrapping_add(1013904223);
             *b = (state >> 24) as u8;
         }
-        let loose = ChunkMode::Cdc { min: 4096, avg: 16384, max: 65536, norm: NORM_DEFAULT };
-        let tight = ChunkMode::Cdc { min: 4096, avg: 16384, max: 65536, norm: NORM_TIGHT };
+        let loose = ChunkMode::Cdc {
+            min: 4096,
+            avg: 16384,
+            max: 65536,
+            norm: NORM_DEFAULT,
+        };
+        let tight = ChunkMode::Cdc {
+            min: 4096,
+            avg: 16384,
+            max: 65536,
+            norm: NORM_TIGHT,
+        };
         let a = split(&data, loose);
         let b = split(&data, tight);
         assert_covers(data.len(), &a);

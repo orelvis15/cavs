@@ -28,11 +28,11 @@
     "koffi": "^2.9.0"
   },
   "optionalDependencies": {
-    "@orelvis15/cavs-sdk-linux-x64": "1.2.0",
-    "@orelvis15/cavs-sdk-linux-arm64": "1.2.0",
-    "@orelvis15/cavs-sdk-darwin-x64": "1.2.0",
-    "@orelvis15/cavs-sdk-darwin-arm64": "1.2.0",
-    "@orelvis15/cavs-sdk-win32-x64": "1.2.0"
+    "@orelvis15/cavs-sdk-linux-x64": "1.3.0",
+    "@orelvis15/cavs-sdk-linux-arm64": "1.3.0",
+    "@orelvis15/cavs-sdk-darwin-x64": "1.3.0",
+    "@orelvis15/cavs-sdk-darwin-arm64": "1.3.0",
+    "@orelvis15/cavs-sdk-win32-x64": "1.3.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

@@ -1,7 +1,9 @@
 //! `Writer::add_chunks_parallel` must be a pure wall-clock optimization:
 //! same chunk indices, same dedup decisions, byte-identical output file.
 
-use cavs_format::{Reader, SegmentRecord, TrackKind, TrackRecord, Writer, SEGMENT_FLAG_RANDOM_ACCESS};
+use cavs_format::{
+    Reader, SegmentRecord, TrackKind, TrackRecord, Writer, SEGMENT_FLAG_RANDOM_ACCESS,
+};
 use std::ops::Range;
 use std::path::Path;
 
@@ -21,7 +23,7 @@ fn pseudo_random(len: usize, seed: u32) -> Vec<u8> {
 fn tricky_payload() -> (Vec<u8>, Vec<Range<usize>>) {
     let mut data = Vec::new();
     let mut ranges = Vec::new();
-    let mut push = |data: &mut Vec<u8>, ranges: &mut Vec<Range<usize>>, bytes: &[u8]| {
+    let push = |data: &mut Vec<u8>, ranges: &mut Vec<Range<usize>>, bytes: &[u8]| {
         let start = data.len();
         data.extend_from_slice(bytes);
         ranges.push(start..data.len());

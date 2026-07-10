@@ -494,9 +494,9 @@ mod tests {
             ChunkMode::Cdc {
                 min: 32 * 1024,
                 avg: 128 * 1024,
-                max: 512 * 1024
-            ,
-                norm: cavs_chunker::NORM_DEFAULT,}
+                max: 512 * 1024,
+                norm: cavs_chunker::NORM_DEFAULT,
+            }
         );
     }
 }
