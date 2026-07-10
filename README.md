@@ -105,6 +105,21 @@ a pixel codec.
   graph`/`simulate`/`explain`, `cavs bench gen-stream`). See
   [docs/PATCH_POLICY_BENCHMARK.md](docs/PATCH_POLICY_BENCHMARK.md) and
   [docs/PRACTICAL_PAIRWISE_DIFFS.md](docs/PRACTICAL_PAIRWISE_DIFFS.md).
+- **Serverless / CDN-only delivery + embeddable client (v1.4.0)**: `cavs
+  store export --static-plans` now emits a self-describing static tree
+  (immutable packs + per-asset `manifest.json` + `chunk-map.json`), and
+  `cavs-client fetch-static <url|dir> <asset>` installs and updates a build
+  **straight from it with no `cavs-server`** — planning locally and pulling
+  only changed chunks over concurrent HTTP Range requests. The same engine
+  ships as a library (`cavs-fetch`), an SDK operation (`fetchStatic` in Go /
+  Kotlin / Node) and through the C ABI, so launchers and games self-update
+  **in-process** with progress and cancellation — which is what the new
+  (untested) Unity and Unreal plugins call. Container fetches can also opt
+  into a **content-addressed parallel download** (`--connections N`): −26%
+  wall time at 4 connections on a localhost origin, more on latency-bound
+  links, with byte-identical egress. See
+  [docs/SERVERLESS_DELIVERY.md](docs/SERVERLESS_DELIVERY.md) and
+  [docs/EMBEDDABLE_FETCH.md](docs/EMBEDDABLE_FETCH.md).
 - **Complementary, not competitive**: use the best codec/compressor for the
   bytes; CAVS deduplicates and transports above them.
 
@@ -153,9 +168,9 @@ the paper, [`docs/PAPER.md`](docs/PAPER.md).
 
 | Folder | What |
 |---|---|
-| [`core/`](core) | The delivery engine (Rust): chunking, hashing, the `.cavs` format, the global content-addressable store, the CVSP protocol, the SteamPipe-style analyzer (`cavs-analyzer`), the local workspace model (`cavs-workspace`), the SDK operation engine (`cavs-sdk-core`) and its C ABI (`cavs-ffi`), and the `cavs` / `cavs-server` / `cavs-client` binaries |
+| [`core/`](core) | The delivery engine (Rust): chunking, hashing, the `.cavs` format, the global content-addressable store, the CVSP protocol, the SteamPipe-style analyzer (`cavs-analyzer`), the local workspace model (`cavs-workspace`), the embeddable serverless fetch engine (`cavs-fetch`), the SDK operation engine (`cavs-sdk-core`) and its C ABI (`cavs-ffi`), and the `cavs` / `cavs-server` / `cavs-client` binaries |
 | [`sdks/`](sdks) | Language SDKs over the shared Rust core via the C ABI: [Go](sdks/go), [Kotlin/JVM](sdks/kotlin) and [Node/TypeScript](sdks/node) |
-| [`game-engine-plugins/`](game-engine-plugins) | Engine integrations over the shared core: [Godot 4](game-engine-plugins/godot-plugin) runtime client in pure GDScript (downloads, verifies and mounts packs with `load_resource_pack()`), plus [Unity](game-engine-plugins/unity-plugin) and [Unreal](game-engine-plugins/unreal-plugin) — **coming soon** |
+| [`game-engine-plugins/`](game-engine-plugins) | Engine integrations over the shared core: [Godot 4](game-engine-plugins/godot-plugin) runtime client in pure GDScript (downloads, verifies and mounts packs with `load_resource_pack()`), plus [Unity](game-engine-plugins/unity-plugin) (C# P/Invoke) and [Unreal](game-engine-plugins/unreal-plugin) (C++) clients over the C ABI — **reference integrations, currently untested** |
 | [`docs/`](docs) | Format specification, architecture, benchmarks, and the technical paper |
 
 ## Getting started
@@ -250,6 +265,28 @@ chunks live in a few immutable packfiles served by coalesced range reads:
 ./target/release/cavs store ./store export --out ./dist         # immutable tree for S3/R2/CDN
 ./target/release/cavs-server --store ./store --listen 127.0.0.1:8990
 ```
+
+### Serverless delivery — update players with no server (v1.4.0)
+
+Export the store as a self-describing static tree and update clients straight
+from it — S3, R2, GitHub Pages, nginx or a local folder — with no
+`cavs-server` running:
+
+```sh
+# Publish: a static tree (packs + manifest.json + chunk-map.json)
+./target/release/cavs store ./store export --out ./dist --static-plans
+# (upload ./dist to any static host that honours HTTP Range)
+
+# Install / update a client from the tree; only changed chunks travel,
+# downloaded concurrently and verified end to end.
+./target/release/cavs-client fetch-static https://cdn.example.com/game game \
+  -o ./install --cache ./cache --connections 8
+```
+
+The same engine is a library (`cavs-fetch`), an SDK op (`fetchStatic`) and a C
+ABI call, so a launcher or game self-updates in-process — see
+[docs/SERVERLESS_DELIVERY.md](docs/SERVERLESS_DELIVERY.md) and
+[docs/EMBEDDABLE_FETCH.md](docs/EMBEDDABLE_FETCH.md).
 
 ### Operate it in production (v0.5.0)
 
@@ -489,9 +526,9 @@ content-addressed, cache-aware update routes. Full docs:
 Integrate CAVS into backend services and CI/CD pipelines programmatically —
 the SDKs load the same compiled Rust core the CLI uses through a stable C ABI
 (`cavs-ffi`), so there is no shelling out and no CAVS-hosted infrastructure.
-All three expose the same eight operations — `analyze`, `preview`,
+All three expose the same operations — `analyze`, `preview`,
 `packDirectory`, `createPlan`, `applyPlan`, `verifyInstall`, `benchmark`,
-`estimateSavings` — with a consistent error model.
+`estimateSavings` and (v1.4.0) `fetchStatic` — with a consistent error model.
 
 ```go
 // Go — github.com/orelvis15/cavs-oss/sdks/go

@@ -86,7 +86,7 @@ pub fn fetch_chunks_parallel(
                     match fetch_one(&agent, server, asset, &hash) {
                         Ok((raw_bytes, wire_len)) => {
                             if let Err(e) = cache.put(&hash, &raw_bytes) {
-                                record_error(&failed, &first_error, e.into());
+                                record_error(&failed, &first_error, e);
                                 return;
                             }
                             wire.fetch_add(wire_len, Ordering::Relaxed);

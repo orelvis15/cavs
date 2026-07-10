@@ -6,6 +6,80 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] — Serverless delivery, parallel downloads & embeddable client
+
+Everything measured below was verified on real version pairs and the
+deterministic synthetic suite; every reconstruction is byte-identical.
+
+### Added
+
+- **Serverless / CDN-only delivery.** `cavs store export --static-plans` now
+  writes, per asset, a `manifest.json` (reconstruction structure) alongside
+  the existing `chunk-map.json` (now carrying absolute pack byte offsets), so
+  the exported tree is fully self-describing. The new
+  `cavs-client fetch-static <url|dir> <asset>` installs and updates a build
+  **straight from that static tree — with no `cavs-server`** — planning the
+  missing set locally and pulling only changed chunks over concurrent HTTP
+  Range requests, verified end to end. Host the tree on S3 / R2 / GitHub
+  Pages / nginx / a local folder. See
+  [docs/SERVERLESS_DELIVERY.md](docs/SERVERLESS_DELIVERY.md).
+- **`cavs-fetch` — an embeddable fetch engine (new crate).** The serverless
+  install/update path as a library: content-addressed cache, concurrent range
+  fetch, BLAKE3-verified reconstruction, a progress callback, cooperative
+  cancellation and optional Ed25519 signature enforcement. Launchers and games
+  link it to self-update in-process. Exposed through a new SDK operation
+  **`fetchStatic`** (Go, Kotlin, Node) and, since the C ABI is generic
+  JSON-in/out, through `libcavs_sdk` with no ABI change. See
+  [docs/EMBEDDABLE_FETCH.md](docs/EMBEDDABLE_FETCH.md).
+- **Unity and Unreal plugins (reference integrations, _untested_).** A Unity
+  UPM package (C# P/Invoke over `libcavs_sdk`) and an Unreal runtime module
+  (`UCavsClient`, C++ over `cavs_sdk.h`), both driving `fetchStatic` for
+  in-game self-update with progress and cancellation. They compile against the
+  C ABI and mirror the shipping SDK bindings but are **not yet validated on a
+  device** — clearly marked as such in their READMEs.
+- **Content-addressed parallel chunk download** in `cavs-client`
+  (`--connections N`, container payloads). Instead of the sequential
+  session/batch round-trips, the client computes its own missing set and
+  downloads immutable chunks **concurrently by hash** from the edge-cacheable
+  chunk endpoint. Measured **−26% wall time at 4 connections** on a localhost
+  origin (1.78 s → 1.32 s on a 60 MB build); the win grows on latency-bound
+  links, where the sequential path pays a round trip per batch. Egress is
+  byte-for-byte identical (compression preserved via a new stored-bytes
+  negotiation on the chunk endpoint). **Opt-in**: the default keeps the
+  session/batch path so a single packfile origin retains its read-coalescing;
+  enable `--connections N` when a CDN fronts the origin.
+- **Small chunk profiles `fastcdc-64k-n3` / `fastcdc-128k-n3`** — the 64 KiB /
+  128 KiB averages with FastCDC normalization level 3. New labels, so existing
+  `fastcdc-64k` / `fastcdc-128k` streams keep their exact published
+  boundaries. On a shifted-and-edited 24 MiB pair, `fastcdc-128k-n3` cut the
+  update payload **−62%** vs `fastcdc-128k` (625 KiB vs 1.64 MiB) for the same
+  edits, at lower total storage; `fastcdc-64k-n3` is neutral there (its chunks
+  are already small). `--profile auto` sweeps them and — because reuse is
+  measured against a published stream's real chunk set — never switches a
+  continuing stream's normalization mid-train.
+
+### Changed
+
+- `cavs-server`'s content-addressed chunk endpoint
+  (`/api/assets/{asset}/chunks/{hash}`) serves the chunk **exactly as stored**
+  (possibly zstd) with wire-metadata headers when the client sends
+  `x-cavs-accept-stored: 1`; it still serves raw bytes to older clients. This
+  gives the parallel path the same wire savings as the session path.
+- Desktop app: the pack profile dropdown offers the new `-n3` profiles, and a
+  new **Serverless CDN** section builds the `store export --static-plans` and
+  `fetch-static` commands.
+
+### Fixed
+
+- `tool_metrics::available()` (used by `certify` and the benchmark harnesses)
+  bounded the external-tool probe with a 1.5 s deadline and now kills the
+  child, so a **GUI `godot` on `PATH` no longer hangs** the command
+  indefinitely (a Homebrew `godot` opens its project manager on the probe flag
+  and never exits).
+- The release workflow's Maven Central deploy now tolerates an
+  already-published version (like the npm and crates jobs), so a re-run — or a
+  cancelled run whose async Portal publish already landed — is idempotent.
+
 ## [1.3.0] — Smaller updates & parallel packing
 
 ### Core algorithm improvements — measured, not projected

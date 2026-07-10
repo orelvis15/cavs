@@ -94,12 +94,13 @@ enum Command {
         /// e.g. mods — are preserved).
         #[arg(long)]
         prune: bool,
-        /// Concurrent connections for the content-addressed chunk fetch
-        /// (container payloads). 1 = one request at a time; higher values
-        /// download missing chunks in parallel from the immutable, edge-
-        /// cacheable chunk endpoint. Set 0 to use the legacy sequential
-        /// session/batch path.
-        #[arg(long, default_value_t = parallel::DEFAULT_CONNECTIONS)]
+        /// Enable the content-addressed parallel chunk fetch (container
+        /// payloads): download missing chunks concurrently by hash from the
+        /// immutable, edge-cacheable chunk endpoint, using this many
+        /// connections. Best when a CDN fronts the origin (each chunk is an
+        /// edge-cached object). 0 (default) keeps the session/batch path,
+        /// which preserves the origin's packfile read-coalescing.
+        #[arg(long, default_value_t = 0)]
         connections: usize,
     },
     /// Fetch an asset from a *static* export (no cavs-server): an object
@@ -317,7 +318,7 @@ fn main() -> Result<()> {
                         enabled: true,
                         ..HybridOpts::default()
                     },
-                    parallel::DEFAULT_CONNECTIONS,
+                    0,
                 ) {
                     eprintln!("[resume] {} failed: {e:#}", j.asset);
                     failures += 1;
@@ -350,7 +351,7 @@ fn main() -> Result<()> {
                     enabled: true,
                     ..HybridOpts::default()
                 },
-                parallel::DEFAULT_CONNECTIONS,
+                0,
             )?;
             let Some(target) = primaries.first() else {
                 bail!("no playable track in asset {asset}");
@@ -690,7 +691,6 @@ fn decode_hex(s: &str, len: usize) -> Result<Vec<u8>> {
         .collect()
 }
 
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn fetch(
     agent: &ureq::Agent,

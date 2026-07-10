@@ -83,8 +83,8 @@ The current schema version is `1.0`; the ABI contract version is `1.0.0`.
 
 ## Operations
 
-The engine understands eight operations. `previewUpdate` and `compareRoutes`
-are aliases for the same implementation. All request/response field names are
+The engine understands nine operations (`previewUpdate` and `compareRoutes`
+are aliases for the same implementation). All request/response field names are
 camelCase.
 
 | Operation | What it does | Key request fields | Key response fields |
@@ -97,6 +97,7 @@ camelCase.
 | `verifyInstall` | Check an installed build against a known-good `.cavssig` **or** a manifest's recorded SHA-256 digests. | `target`, exactly one of `signature` / `manifest`, `allowExtra` | `verified`, `filesChecked`, `bytesChecked`, `mismatches` (`modified`, `missing`, `extra`), `elapsedMs` |
 | `benchmark` | Repeatable route-comparison report for CI/CD; adds measured diff/apply timings for the CAVS plan route. | `oldPath`, `newPath`, `engineHint`, `measureApply` (default `true`) | `oldSizeBytes`, `newSizeBytes`, `recommendedRoute`, `routes[]` (with `diffMs`/`applyMs` on the `cavsPlan` route), `reuseRatio` |
 | `estimateSavings` | Pure arithmetic over a pricing model: monthly egress cost of full downloads vs CAVS updates. | `pricePerGb`, `monthlyDownloads`, `averageFullDownloadBytes`, `averageCavsDownloadBytes` | `fullDownloadMonthlyCost`, `cavsMonthlyCost`, `estimatedMonthlySavings`, `savingsPercent` |
+| `fetchStatic` (v1.4.0) | Install/update a build straight from a static export (`store export --static-plans`) with no cavs-server; downloads only cache-missing chunks concurrently, verified. Progress + cancellation. | `base` (URL or dir), `asset`, `outputDir`, `cacheDir`, `connections` (default 8), `pubkey` | `asset`, `outputDir`, `wireBytes`, `rawBytes`, `chunksFetched`, `chunksReused`, `logicalBytes`, `savedPercent` |
 
 The routes modeled by `previewUpdate`/`benchmark` are `fullRaw`,
 `steamPipeStyle`, `cavsChunk` and `cavsPlan` (`cavsPlan` is the exact encoded
@@ -113,7 +114,7 @@ succeed) and optional `details`.
 |---|---|---|
 | `CAVS-E-INVALID-REQUEST` | Request payload was malformed or failed validation. | no |
 | `CAVS-E-INVALID-JSON` | Request JSON did not parse. | no |
-| `CAVS-E-UNKNOWN-OPERATION` | Operation name is not one of the eight. | no |
+| `CAVS-E-UNKNOWN-OPERATION` | Operation name is not a known operation. | no |
 | `CAVS-E-UNSUPPORTED-SCHEMA` | `schemaVersion` major is not `1`. | no |
 | `CAVS-E-PATH-NOT-FOUND` | An input path (build, plan, signature) does not exist. | no |
 | `CAVS-E-PATH-TRAVERSAL` | A tree entry resolved to an unsafe path. | no |
@@ -139,7 +140,7 @@ library supports:
   "schemaVersion": "1.0",
   "features": ["analyze", "packDirectory", "previewUpdate", "compareRoutes",
                "createPlan", "applyPlan", "verifyInstall", "benchmark",
-               "estimateSavings"],
+               "estimateSavings", "fetchStatic"],
   "platform": { "os": "linux", "arch": "x86_64" }
 }
 ```
