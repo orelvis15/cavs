@@ -1,0 +1,9 @@
+{
+  "name": "Cavs.Sdk",
+  "rootNamespace": "Cavs",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "autoReferenced": true
+}
