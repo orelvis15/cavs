@@ -13,7 +13,9 @@
 mod cache;
 mod hybrid;
 mod journal;
+mod parallel;
 mod retry;
+mod serverless;
 
 use anyhow::{anyhow, bail, Context, Result};
 use cache::ChunkCache;
@@ -92,6 +94,40 @@ enum Command {
         /// e.g. mods — are preserved).
         #[arg(long)]
         prune: bool,
+        /// Concurrent connections for the content-addressed chunk fetch
+        /// (container payloads). 1 = one request at a time; higher values
+        /// download missing chunks in parallel from the immutable, edge-
+        /// cacheable chunk endpoint. Set 0 to use the legacy sequential
+        /// session/batch path.
+        #[arg(long, default_value_t = parallel::DEFAULT_CONNECTIONS)]
+        connections: usize,
+    },
+    /// Fetch an asset from a *static* export (no cavs-server): an object
+    /// tree produced by `cavs store export --static-plans`, hosted on S3 /
+    /// R2 / GitHub Pages / nginx / a local folder. The client plans the
+    /// missing set locally and downloads only the chunks it lacks via HTTP
+    /// Range requests, verified end to end.
+    FetchStatic {
+        /// Base URL or local directory of the static export
+        /// (e.g. https://cdn.example.com/game or ./dist).
+        base: String,
+        /// Asset name (the `<name>` under `assets/<name>/` in the export).
+        asset: String,
+        /// Output directory.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Persistent chunk cache directory (survives across fetches).
+        #[arg(long, default_value = ".cavs-cache")]
+        cache: PathBuf,
+        /// Concurrent range requests.
+        #[arg(long, default_value_t = parallel::DEFAULT_CONNECTIONS)]
+        connections: usize,
+        /// Trust this PEM certificate for an HTTPS base (dev self-signed).
+        #[arg(long)]
+        ca: Option<PathBuf>,
+        /// Require the asset to be signed by this Ed25519 public key.
+        #[arg(long)]
+        pubkey: Option<String>,
     },
     /// Resume interrupted fetches recorded in the cache's journal.
     Resume {
@@ -193,6 +229,7 @@ fn main() -> Result<()> {
             dump_plan,
             force_reconstruct,
             prune,
+            connections,
         } => {
             let agent = build_agent(ca.as_deref())?;
             let hybrid_opts = HybridOpts {
@@ -211,11 +248,38 @@ fn main() -> Result<()> {
                 pubkey.as_deref(),
                 !no_resume,
                 &hybrid_opts,
+                connections,
             )?;
             if let Some(path) = stats_json {
                 std::fs::write(&path, stats.to_json())
                     .with_context(|| format!("cannot write {}", path.display()))?;
             }
+            Ok(())
+        }
+        Command::FetchStatic {
+            base,
+            asset,
+            output,
+            cache,
+            connections,
+            ca,
+            pubkey,
+        } => {
+            let agent = build_agent(ca.as_deref())?;
+            let source = serverless::StaticSource::parse(&base, agent);
+            let cache = ChunkCache::open(&cache)?;
+            let pk_hex = match &pubkey {
+                Some(pk) => Some(load_pubkey(pk)?),
+                None => None,
+            };
+            serverless::fetch_static(
+                &source,
+                &asset,
+                &output,
+                &cache,
+                connections,
+                pk_hex.as_deref(),
+            )?;
             Ok(())
         }
         Command::Resume {
@@ -253,6 +317,7 @@ fn main() -> Result<()> {
                         enabled: true,
                         ..HybridOpts::default()
                     },
+                    parallel::DEFAULT_CONNECTIONS,
                 ) {
                     eprintln!("[resume] {} failed: {e:#}", j.asset);
                     failures += 1;
@@ -285,6 +350,7 @@ fn main() -> Result<()> {
                     enabled: true,
                     ..HybridOpts::default()
                 },
+                parallel::DEFAULT_CONNECTIONS,
             )?;
             let Some(target) = primaries.first() else {
                 bail!("no playable track in asset {asset}");
@@ -602,6 +668,19 @@ fn verify_manifest_signature(manifest: &Manifest, trusted_pubkey_hex: &str) -> R
     Ok(())
 }
 
+/// Accept a literal 64-hex Ed25519 key or a path to a `.pub` file, and
+/// return the hex string.
+fn load_pubkey(pk: &str) -> Result<String> {
+    if pk.len() == 64 && pk.chars().all(|c| c.is_ascii_hexdigit()) {
+        Ok(pk.to_string())
+    } else {
+        Ok(std::fs::read_to_string(pk)
+            .with_context(|| format!("cannot read pubkey file {pk}"))?
+            .trim()
+            .to_string())
+    }
+}
+
 fn decode_hex(s: &str, len: usize) -> Result<Vec<u8>> {
     if s.len() != len * 2 {
         anyhow::bail!("expected {} hex chars, got {}", len * 2, s.len());
@@ -612,6 +691,7 @@ fn decode_hex(s: &str, len: usize) -> Result<Vec<u8>> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn fetch(
     agent: &ureq::Agent,
     server: &str,
@@ -621,6 +701,7 @@ fn fetch(
     pubkey: Option<&str>,
     resume: bool,
     hybrid_opts: &HybridOpts,
+    connections: usize,
 ) -> Result<(Vec<PathBuf>, FetchStats)> {
     let cache = ChunkCache::open(cache_dir)?;
 
@@ -989,106 +1070,147 @@ fn fetch(
         .save(cache_dir);
     }
 
-    // 3. Batches, processed as a stream: each inline chunk is verified and
-    //    lands in the disk cache as it arrives — nothing accumulates in RAM
-    //    (the content-addressable cache IS the store). References are only
-    //    counted here; reconstruction reads them from the cache.
+    // 3. Fetch the chunks this client lacks and land them verified in the
+    //    disk cache — nothing accumulates in RAM (the content-addressable
+    //    cache IS the store). References are only counted; reconstruction
+    //    reads them from the cache.
     let mut inline_bytes = 0u64;
     let mut inline_raw_bytes = 0u64;
     let mut inline_count = 0u64;
     let mut ref_count = 0u64;
-    // Refs the server assumed we had (bloom false positives) but our cache
-    // actually lacks — repaired after the batch loop.
-    let mut missing_refs: Vec<cavs_hash::ChunkHash> = Vec::new();
 
-    let all_tracks: Vec<u32> = manifest.tracks.iter().map(|t| t.track_id).collect();
-    let mut segment_ids: Vec<u64> = manifest.segments.iter().map(|s| s.segment_id).collect();
-    segment_ids.sort_unstable();
-
-    let mut first = true;
-    for group in segment_ids.chunks(BATCH_SIZE.max(1)) {
-        let req = BatchRequest {
-            track_inits: if first {
-                all_tracks.clone()
-            } else {
-                Vec::new()
-            },
-            segment_ids: group.to_vec(),
-        };
-        first = false;
-        let mut reader = http_post_reader(
-            agent,
-            &format!("{server}/api/sessions/{}/batch", session.session_id),
-            &serde_json::to_string(&req)?,
-        )?;
-        cavs_proto::decode_stream(&mut reader, |item| {
-            let cavs_proto::BatchItem::Instr(instr) = item else {
-                return Ok(());
-            };
-            let hex = to_hex(instr.hash());
-            match instr {
-                DeliveryInstr::Inline {
-                    hash,
-                    len_raw,
-                    compression,
-                    payload,
-                } => {
-                    inline_bytes += payload.len() as u64;
-                    let raw = match compression {
-                        cavs_proto::WIRE_COMPRESSION_NONE => payload,
-                        cavs_proto::WIRE_COMPRESSION_ZSTD => {
-                            zstd::bulk::decompress(&payload, len_raw as usize)
-                                .map_err(|e| format!("descomprimiendo chunk {hex}: {e}"))?
-                        }
-                        other => return Err(format!("unknown wire compression {other}")),
-                    };
-                    if raw.len() != len_raw as usize || cavs_hash::hash_chunk(&raw) != hash {
-                        return Err(ErrorCode::ChunkHashMismatch
-                            .msg(format!("inline chunk {hex} failed hash verification")));
-                    }
-                    cache.put(&hash, &raw).map_err(|e| e.to_string())?;
-                    inline_raw_bytes += raw.len() as u64;
-                    inline_count += 1;
-                }
-                DeliveryInstr::Ref { hash } => {
-                    ref_count += 1;
-                    // Bloom false positive: server thinks we have it, but
-                    // neither the cache nor the previous artifact does.
-                    if !cache.contains(&hex)
-                        && !prev.as_ref().is_some_and(|p| p.index.contains_key(&hex))
-                    {
-                        missing_refs.push(hash);
-                    }
-                }
+    // v1.4.0: for container payloads (game builds / directory trees) the
+    // client computes its own missing set from the manifest and downloads
+    // those immutable chunks by hash, concurrently, from the edge-cacheable
+    // chunk endpoint. This replaces the sequential session/batch round-trips
+    // for the game-asset path; `--connections 0` (or a media payload) keeps
+    // the legacy session/batch stream.
+    let use_parallel = connections >= 1 && is_container;
+    if use_parallel {
+        // Unique chunks the asset needs, in manifest order (read locality),
+        // minus whatever the cache or the previous artifact already provides.
+        let mut seen = std::collections::HashSet::new();
+        let mut missing: Vec<cavs_hash::ChunkHash> = Vec::new();
+        let mut have_local = 0u64;
+        for hex in manifest_chunk_hashes(&manifest) {
+            if !seen.insert(hex.clone()) {
+                continue;
             }
-            Ok(())
-        })
-        .map_err(|e| anyhow::anyhow!("bad batch payload: {e}"))?;
-    }
-
-    // 3b. Repair bloom false positives: fetch each missing referenced chunk
-    //     directly by hash, verify and cache it.
-    missing_refs.sort_unstable();
-    missing_refs.dedup();
-    if !missing_refs.is_empty() {
+            let present =
+                cache.contains(&hex) || prev.as_ref().is_some_and(|p| p.index.contains_key(&hex));
+            if present {
+                have_local += 1;
+            } else if let Some(h) = cavs_hash::from_hex(&hex) {
+                missing.push(h);
+            }
+        }
+        ref_count = have_local;
         eprintln!(
-            "[fetch] repairing {} bloom false-positive ref(s)",
-            missing_refs.len()
+            "[fetch] parallel chunk fetch: {} missing, {} already local, {} connection(s)",
+            missing.len(),
+            have_local,
+            connections
         );
-        for hash in &missing_refs {
-            let hex = to_hex(hash);
-            let raw = http_get_bytes(agent, &format!("{server}/api/assets/{asset}/chunks/{hex}"))?;
-            if cavs_hash::hash_chunk(&raw) != *hash {
-                bail!(
-                    "{}",
-                    ErrorCode::ChunkHashMismatch
-                        .msg(format!("repaired chunk {hex} failed hash verification"))
-                );
+        let pstats =
+            parallel::fetch_chunks_parallel(agent, server, asset, &missing, &cache, connections)?;
+        inline_bytes = pstats.wire_bytes;
+        inline_raw_bytes = pstats.raw_bytes;
+        inline_count = pstats.count;
+    } else {
+        // Legacy session/batch stream. Refs the server assumed we had (bloom
+        // false positives) but our cache actually lacks are repaired after
+        // the loop by a direct by-hash fetch.
+        let mut missing_refs: Vec<cavs_hash::ChunkHash> = Vec::new();
+        let all_tracks: Vec<u32> = manifest.tracks.iter().map(|t| t.track_id).collect();
+        let mut segment_ids: Vec<u64> = manifest.segments.iter().map(|s| s.segment_id).collect();
+        segment_ids.sort_unstable();
+
+        let mut first = true;
+        for group in segment_ids.chunks(BATCH_SIZE.max(1)) {
+            let req = BatchRequest {
+                track_inits: if first {
+                    all_tracks.clone()
+                } else {
+                    Vec::new()
+                },
+                segment_ids: group.to_vec(),
+            };
+            first = false;
+            let mut reader = http_post_reader(
+                agent,
+                &format!("{server}/api/sessions/{}/batch", session.session_id),
+                &serde_json::to_string(&req)?,
+            )?;
+            cavs_proto::decode_stream(&mut reader, |item| {
+                let cavs_proto::BatchItem::Instr(instr) = item else {
+                    return Ok(());
+                };
+                let hex = to_hex(instr.hash());
+                match instr {
+                    DeliveryInstr::Inline {
+                        hash,
+                        len_raw,
+                        compression,
+                        payload,
+                    } => {
+                        inline_bytes += payload.len() as u64;
+                        let raw = match compression {
+                            cavs_proto::WIRE_COMPRESSION_NONE => payload,
+                            cavs_proto::WIRE_COMPRESSION_ZSTD => {
+                                zstd::bulk::decompress(&payload, len_raw as usize)
+                                    .map_err(|e| format!("descomprimiendo chunk {hex}: {e}"))?
+                            }
+                            other => return Err(format!("unknown wire compression {other}")),
+                        };
+                        if raw.len() != len_raw as usize || cavs_hash::hash_chunk(&raw) != hash {
+                            return Err(ErrorCode::ChunkHashMismatch
+                                .msg(format!("inline chunk {hex} failed hash verification")));
+                        }
+                        cache.put(&hash, &raw).map_err(|e| e.to_string())?;
+                        inline_raw_bytes += raw.len() as u64;
+                        inline_count += 1;
+                    }
+                    DeliveryInstr::Ref { hash } => {
+                        ref_count += 1;
+                        // Bloom false positive: server thinks we have it, but
+                        // neither the cache nor the previous artifact does.
+                        if !cache.contains(&hex)
+                            && !prev.as_ref().is_some_and(|p| p.index.contains_key(&hex))
+                        {
+                            missing_refs.push(hash);
+                        }
+                    }
+                }
+                Ok(())
+            })
+            .map_err(|e| anyhow::anyhow!("bad batch payload: {e}"))?;
+        }
+
+        // 3b. Repair bloom false positives: fetch each missing referenced
+        //     chunk directly by hash, verify and cache it.
+        missing_refs.sort_unstable();
+        missing_refs.dedup();
+        if !missing_refs.is_empty() {
+            eprintln!(
+                "[fetch] repairing {} bloom false-positive ref(s)",
+                missing_refs.len()
+            );
+            for hash in &missing_refs {
+                let hex = to_hex(hash);
+                let raw =
+                    http_get_bytes(agent, &format!("{server}/api/assets/{asset}/chunks/{hex}"))?;
+                if cavs_hash::hash_chunk(&raw) != *hash {
+                    bail!(
+                        "{}",
+                        ErrorCode::ChunkHashMismatch
+                            .msg(format!("repaired chunk {hex} failed hash verification"))
+                    );
+                }
+                cache.put(hash, &raw)?;
+                inline_bytes += raw.len() as u64;
+                inline_raw_bytes += raw.len() as u64;
+                inline_count += 1;
             }
-            cache.put(hash, &raw)?;
-            inline_bytes += raw.len() as u64;
-            inline_raw_bytes += raw.len() as u64;
-            inline_count += 1;
         }
     }
 

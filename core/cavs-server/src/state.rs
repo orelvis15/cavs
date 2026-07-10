@@ -734,6 +734,32 @@ impl AppState {
         asset.source.read_raw(idx)
     }
 
+    /// The chunk exactly as stored: possibly zstd-compressed bytes plus the
+    /// wire compression tag and raw length. Lets a content-addressed
+    /// *parallel* client (v1.4.0) fetch immutable chunks by hash with the
+    /// same wire savings as the session/batch path — a cache-less client
+    /// downloads only what it lacks, concurrently, straight from an
+    /// edge-cacheable endpoint. Returns `(stored_bytes, wire_compression,
+    /// len_raw)`.
+    pub fn chunk_stored_by_hash(
+        &self,
+        asset_name: &str,
+        hash_hex: &str,
+    ) -> Option<(Vec<u8>, u8, u32)> {
+        let asset = self.assets.get(asset_name)?;
+        let idx = *asset.index_by_hash.get(&from_hex(hash_hex)?)?;
+        self.metrics
+            .chunk_requests_total
+            .fetch_add(1, Ordering::Relaxed);
+        let (stored, flags, len_raw) = asset.source.read_stored(idx).ok()?;
+        let compression = if flags & CHUNK_FLAG_ZSTD != 0 {
+            cavs_proto::WIRE_COMPRESSION_ZSTD
+        } else {
+            cavs_proto::WIRE_COMPRESSION_NONE
+        };
+        Some((stored, compression, len_raw))
+    }
+
     /// Reconstruct HLS artifacts on the fly for direct standard playback.
     pub fn hls_file(
         &self,

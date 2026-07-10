@@ -372,26 +372,60 @@ fn parse_byte_range(value: &str, size: u64) -> RangeParse {
     RangeParse::Range(start, end)
 }
 
+/// Header a v1.4.0 parallel/serverless client sends to receive the chunk
+/// exactly as stored (possibly zstd) plus its wire metadata, instead of the
+/// raw bytes older clients expect. Backward compatible: without it the
+/// endpoint keeps serving raw bytes.
+const ACCEPT_STORED_HEADER: &str = "x-cavs-accept-stored";
+/// Response headers carrying the stored-chunk wire metadata.
+const COMPRESSION_HEADER: &str = "x-cavs-compression";
+const RAW_LEN_HEADER: &str = "x-cavs-raw-len";
+
 async fn get_chunk(
     State(state): State<SharedState>,
     Path((asset, hash)): Path<(String, String)>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
+    // Content-addressed: immutable forever, ideal for edge caches.
+    let immutable = (
+        header::CACHE_CONTROL,
+        "public, max-age=31536000, immutable".to_string(),
+    );
+    let etag = (header::ETAG, format!("\"blake3-{hash}\""));
+    let octet = (header::CONTENT_TYPE, "application/octet-stream".to_string());
+
+    let wants_stored = headers
+        .get(ACCEPT_STORED_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+
+    if wants_stored {
+        let (bytes, compression, len_raw) = state
+            .chunk_stored_by_hash(&asset, &hash)
+            .ok_or_else(|| not_found(format!("chunk {hash}")))?;
+        return Ok((
+            [
+                octet,
+                immutable,
+                etag,
+                (
+                    header::HeaderName::from_static(COMPRESSION_HEADER),
+                    compression.to_string(),
+                ),
+                (
+                    header::HeaderName::from_static(RAW_LEN_HEADER),
+                    len_raw.to_string(),
+                ),
+            ],
+            bytes,
+        )
+            .into_response());
+    }
+
     let bytes = state
         .chunk_by_hash(&asset, &hash)
         .ok_or_else(|| not_found(format!("chunk {hash}")))?;
-    Ok((
-        [
-            (header::CONTENT_TYPE, "application/octet-stream".to_string()),
-            // Content-addressed: immutable forever, ideal for edge caches.
-            (
-                header::CACHE_CONTROL,
-                "public, max-age=31536000, immutable".to_string(),
-            ),
-            (header::ETAG, format!("\"blake3-{hash}\"")),
-        ],
-        bytes,
-    )
-        .into_response())
+    Ok(([octet, immutable, etag], bytes).into_response())
 }
 
 async fn hls_file(

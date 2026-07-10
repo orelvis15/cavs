@@ -781,13 +781,19 @@ impl GlobalStore {
                         "chunk {hex} is not packed (ingest still open?)"
                     )));
                 };
+                // `pack_offset` is into the pack's data region; a static
+                // client that knows nothing about the packfile header wants
+                // the absolute file offset for its HTTP Range request, so we
+                // publish both.
+                let pack_offset = info.pack_offset.unwrap_or(0);
                 chunks.push(serde_json::json!({
                     "hash": hex,
                     "len_raw": info.len_raw,
                     "len_stored": info.len_stored,
                     "flags": info.flags,
                     "pack": format!("chunks/packs/{}/{pack}.cavspack", &pack[..2]),
-                    "pack_offset": info.pack_offset,
+                    "pack_offset": pack_offset,
+                    "pack_offset_abs": packfile::PACK_HEADER_LEN + pack_offset,
                 }));
             }
             let rel = format!("assets/{name}/chunk-map.json");

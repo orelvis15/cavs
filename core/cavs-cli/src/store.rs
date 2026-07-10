@@ -148,17 +148,92 @@ pub fn verify(store_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Build the runtime `Manifest` for a stored asset (the reconstruction
+/// structure a client needs: ordered chunks per track/segment, with each
+/// chunk's raw length pulled from the store ledger). Mirrors the server's
+/// `AppState::manifest`, but reads from an `AssetRecord` + the chunk ledger
+/// so a *serverless* client can plan a fetch from a static export.
+fn record_to_manifest(store: &GlobalStore, record: &AssetRecord) -> cavs_proto::Manifest {
+    let chunk_ref = |hex: &str| {
+        let len = cavs_hash::from_hex(hex)
+            .and_then(|h| store.chunk_info(&h))
+            .map(|i| i.len_raw)
+            .unwrap_or(0);
+        cavs_proto::ChunkRef {
+            hash: hex.to_string(),
+            len,
+        }
+    };
+    cavs_proto::Manifest {
+        asset: record.name.clone(),
+        asset_uuid: record.asset_uuid.clone(),
+        tracks: record
+            .tracks
+            .iter()
+            .map(|t| cavs_proto::ManifestTrack {
+                track_id: t.track_id,
+                kind: cavs_format::TrackKind::from_u8(t.kind)
+                    .map(|k| k.label().to_string())
+                    .unwrap_or_else(|| "data".to_string()),
+                codec: t.codec.clone(),
+                name: t.name.clone(),
+                timescale: t.timescale,
+                init_chunks: t.init_chunks.iter().map(|h| chunk_ref(h)).collect(),
+            })
+            .collect(),
+        segments: record
+            .segments
+            .iter()
+            .map(|s| cavs_proto::ManifestSegment {
+                segment_id: s.segment_id,
+                track_id: s.track_id,
+                pts_start: s.pts_start,
+                duration: s.duration,
+                random_access: s.random_access,
+                chunks: s.chunks.iter().map(|h| chunk_ref(h)).collect(),
+            })
+            .collect(),
+        dict: record.dict.clone(),
+        chunk_table: record.chunk_table.clone(),
+        merkle_root: record.merkle_root.clone(),
+        signature: record.signature.clone(),
+        signer_pubkey: record.signer_pubkey.clone(),
+        meta: record.meta.clone(),
+    }
+}
+
+/// Write `assets/<name>/manifest.json` for every asset into the export tree,
+/// so a serverless client can read the reconstruction structure with no
+/// running server. Returns the relative paths written.
+fn write_static_manifests(store: &GlobalStore, out: &Path) -> Result<Vec<String>> {
+    let mut written = Vec::new();
+    for name in store.asset_names() {
+        let record = store.get_asset(&name)?;
+        let manifest = record_to_manifest(store, &record);
+        let rel = format!("assets/{name}/manifest.json");
+        let dst = out.join(&rel);
+        std::fs::create_dir_all(dst.parent().unwrap())?;
+        std::fs::write(&dst, serde_json::to_vec_pretty(&manifest)?)
+            .with_context(|| format!("writing {}", dst.display()))?;
+        written.push(rel);
+    }
+    Ok(written)
+}
+
 /// Export as a deterministic immutable object tree for object storage/CDN.
 pub fn export(store_dir: &Path, out: &Path, static_plans: bool) -> Result<()> {
     let store = GlobalStore::open(store_dir)?;
     let mut written = store.export_object_store(out)?;
     if static_plans {
         let plans = store.export_static_plans(out)?;
+        let manifests = write_static_manifests(&store, out)?;
         println!(
-            "plans   : {} chunk-map.json (static/CDN clients)",
-            plans.len()
+            "plans   : {} chunk-map.json + {} manifest.json (serverless clients)",
+            plans.len(),
+            manifests.len()
         );
         written.extend(plans);
+        written.extend(manifests);
     }
     let packs = written
         .iter()
