@@ -7,6 +7,8 @@ import com.cavs.sdk.model.ApplyResult
 import com.cavs.sdk.model.BenchmarkReport
 import com.cavs.sdk.model.BenchmarkRequest
 import com.cavs.sdk.model.CreatePlanRequest
+import com.cavs.sdk.model.FetchStaticRequest
+import com.cavs.sdk.model.FetchStaticResult
 import com.cavs.sdk.model.PackDirectoryRequest
 import com.cavs.sdk.model.PackResult
 import com.cavs.sdk.model.PlanResult

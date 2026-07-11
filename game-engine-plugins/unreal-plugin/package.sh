@@ -41,11 +41,11 @@ find "$PLUG" -name '.DS_Store' -delete 2>/dev/null || true
 if [ -n "$NATIVE_DIR" ] && [ -d "$NATIVE_DIR" ]; then
   LIBROOT="$PLUG/Source/ThirdParty/CavsSdkLibrary/lib"
   stage() { # <target-substring> <UnrealPlatform> <files...>
-    src=$(find "$NATIVE_DIR" -type d -name "cavs-sdk-native-*-$1" | head -1)
+    _target="$1"; _plat="$2"; shift 2
+    src=$(find "$NATIVE_DIR" -type d -name "cavs-sdk-native-*-$_target" | head -1)
     [ -n "$src" ] || return 0
-    mkdir -p "$LIBROOT/$2"
-    shift 2
-    for f in "$@"; do [ -e "$src/$f" ] && cp "$src/$f" "$LIBROOT/$2/"; done
+    mkdir -p "$LIBROOT/$_plat"
+    for f in "$@"; do [ -e "$src/$f" ] && cp "$src/$f" "$LIBROOT/$_plat/"; done
   }
   stage x86_64-pc-windows-msvc   Win64 cavs_sdk.dll cavs_sdk.dll.lib
   stage x86_64-apple-darwin      Mac   libcavs_sdk.dylib
