@@ -518,13 +518,11 @@ fn fetch_missing_parallel(
                     failed.store(true, Ordering::Relaxed);
                     return;
                 }
-                let idx = next.fetch_add(1, Ordering::Relaxed);
-                if idx >= missing.len() {
-                    return;
-                }
                 // AUTO: hold one of the AIMD limit's slots for the whole
-                // download+decode of this group. A waiter gives up (`None`)
-                // when another worker has already latched a failure.
+                // download+decode of this group. The slot is taken BEFORE
+                // claiming a work item — a parked worker must never hold
+                // an item hostage while admitted workers idle. A waiter
+                // gives up (`None`) when another worker latched a failure.
                 let ctrl = adaptive.as_ref().map(|(c, _)| c);
                 let _slot = match &adaptive {
                     Some((c, gate)) => {
@@ -535,6 +533,10 @@ fn fetch_missing_parallel(
                     }
                     None => None,
                 };
+                let idx = next.fetch_add(1, Ordering::Relaxed);
+                if idx >= missing.len() {
+                    return;
+                }
                 let group = &missing[idx];
                 let (_permit, waited) = ByteBudget::global().acquire(group.span);
                 if waited {
