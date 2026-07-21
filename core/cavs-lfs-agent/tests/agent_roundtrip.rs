@@ -238,6 +238,126 @@ fn unknown_oid_is_a_clean_404_and_agent_survives() {
     agent.terminate();
 }
 
+/// Send an upload and kill the agent as soon as the first progress event
+/// arrives (mid pack/ingest/export). Returns the oid.
+fn upload_and_kill(remote: &Path, cache: &Path, work: &Path, data: &[u8]) -> String {
+    let oid = oid_of(data);
+    let src = work.join(&oid);
+    std::fs::write(&src, data).unwrap();
+
+    let mut agent = Agent::spawn(remote, cache, &[]);
+    agent.init("upload");
+    agent.send(json!({
+        "event": "upload", "oid": oid, "size": data.len(), "path": src
+    }));
+    // Wait for evidence the transfer is underway, then kill mid-flight.
+    let msg = agent.recv();
+    assert_eq!(msg["event"], "progress", "expected progress, got {msg}");
+    agent.child.kill().expect("kill agent");
+    let _ = agent.child.wait();
+    oid
+}
+
+#[test]
+fn interrupted_upload_recovers_on_retry() {
+    let tmp = tempfile::tempdir().unwrap();
+    let remote = tmp.path().join("remote");
+    let cache = tmp.path().join("cache");
+    let work = tmp.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+
+    let data = test_bytes(32 * 1024 * 1024, 2024);
+
+    // Kill an upload mid-flight, twice — the store must never be corrupted
+    // (stray .part packs are cleaned on the next open; the flock dies with
+    // the process).
+    let oid = upload_and_kill(&remote, &cache, &work, &data);
+    upload_and_kill(&remote, &cache, &work, &data);
+
+    // Retry: the re-push must fully repair (publish + export) …
+    let oid2 = upload(&remote, &cache, &work, &data);
+    assert_eq!(oid, oid2);
+    assert!(remote
+        .join("assets")
+        .join(&oid)
+        .join("manifest.json")
+        .is_file());
+
+    // … and the object must round-trip byte-identical.
+    let got = download(&remote, &tmp.path().join("cache-dl"), &oid);
+    assert_eq!(oid_of(&got), oid, "reconstructed bytes differ after crash");
+
+    // A later unrelated upload into the same (previously crashed) store
+    // must also work — the store survived the interruptions.
+    let other = test_bytes(4 * 1024 * 1024, 555);
+    upload(&remote, &cache, &work, &other);
+}
+
+#[test]
+fn interrupted_download_recovers_on_retry() {
+    let tmp = tempfile::tempdir().unwrap();
+    let remote = tmp.path().join("remote");
+    let cache_up = tmp.path().join("cache-up");
+    let cache_dl = tmp.path().join("cache-dl");
+    let work = tmp.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+
+    let data = test_bytes(32 * 1024 * 1024, 31337);
+    let oid = upload(&remote, &cache_up, &work, &data);
+
+    // Start a download and kill the agent at the first progress event —
+    // the chunk cache is left partial but every cached chunk is complete
+    // and hash-verified (atomic tmp+rename writes).
+    let mut agent = Agent::spawn(&remote, &cache_dl, &[]);
+    agent.init("download");
+    agent.send(json!({"event": "download", "oid": oid, "size": data.len()}));
+    let msg = agent.recv();
+    assert_eq!(msg["event"], "progress", "expected progress, got {msg}");
+    agent.child.kill().expect("kill agent");
+    let _ = agent.child.wait();
+
+    // Retry with the same cache: partial chunks are reused, the rest is
+    // fetched, and the result is byte-identical.
+    let got = download(&remote, &cache_dl, &oid);
+    assert_eq!(oid_of(&got), oid, "reconstructed bytes differ after crash");
+}
+
+#[test]
+fn batch_uploads_share_one_session() {
+    let tmp = tempfile::tempdir().unwrap();
+    let remote = tmp.path().join("remote");
+    let cache = tmp.path().join("cache");
+    let work = tmp.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+
+    // Several objects through ONE agent process (one push session), like a
+    // real multi-object git push.
+    let blobs: Vec<Vec<u8>> = (0..5)
+        .map(|i| test_bytes(2 * 1024 * 1024, 9000 + i))
+        .collect();
+    let mut agent = Agent::spawn(&remote, &cache, &[]);
+    agent.init("upload");
+    let mut oids = Vec::new();
+    for data in &blobs {
+        let oid = oid_of(data);
+        let src = work.join(&oid);
+        std::fs::write(&src, data).unwrap();
+        agent.send(json!({
+            "event": "upload", "oid": oid, "size": data.len(), "path": src
+        }));
+        let done = agent.recv_complete(&oid);
+        assert!(done.get("error").is_none(), "upload failed: {done}");
+        oids.push(oid);
+    }
+    agent.terminate();
+
+    // Every object of the batch is independently fetchable.
+    for (i, oid) in oids.iter().enumerate() {
+        let got = download(&remote, &tmp.path().join("cache-dl"), oid);
+        assert_eq!(&got, &blobs[i], "object {i} corrupted");
+    }
+}
+
 #[test]
 fn upload_to_http_remote_is_rejected() {
     let tmp = tempfile::tempdir().unwrap();
