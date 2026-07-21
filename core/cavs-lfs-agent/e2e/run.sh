@@ -67,8 +67,8 @@ configure_lfs() { # configure_lfs <repo-dir>
 }
 
 echo "[e2e] 1. bare origin + working clone"
-git init -q --bare "$WORK/origin.git"
-git init -q "$WORK/repo"
+git init -q -b main --bare "$WORK/origin.git"
+git init -q -b main "$WORK/repo"
 git -C "$WORK/repo" remote add origin "$WORK/origin.git"
 git -C "$WORK/repo" config user.email e2e@example.com
 git -C "$WORK/repo" config user.name e2e

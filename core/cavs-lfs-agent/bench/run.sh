@@ -134,8 +134,8 @@ run_system() {
   mkdir -p "$ROOT"
   echo "[bench] === $SC / $SYSNAME ($NV versions) ==="
 
-  git init -q --bare "$ORIGIN"
-  git init -q "$REPO"
+  git init -q -b main --bare "$ORIGIN"
+  git init -q -b main "$REPO"
   git -C "$REPO" config user.email bench@example.com
   git -C "$REPO" config user.name bench
 
@@ -279,7 +279,7 @@ run_crossrepo() {
   local ORIGIN="$ROOT/origin.git"
   mkdir -p "$ROOT"
   echo "[bench] === $SC / $SYSNAME ==="
-  git init -q --bare "$ORIGIN"
+  git init -q -b main --bare "$ORIGIN"
   local REMOTE_URL="$ORIGIN"
   [ "$SYS" = lfs ] && REMOTE_URL="file://$ORIGIN"
 
@@ -287,7 +287,7 @@ run_crossrepo() {
   for r in a b; do
     v=$([ "$r" = a ] && echo 1 || echo 2)
     local REPO="$ROOT/repo-$r"
-    git init -q "$REPO"
+    git init -q -b main "$REPO"
     git -C "$REPO" config user.email bench@example.com
     git -C "$REPO" config user.name bench
     case $SYS in
