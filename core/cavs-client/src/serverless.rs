@@ -208,8 +208,10 @@ pub fn fetch_static(
         connections
     );
 
-    // 3. Concurrent range fetch: verify each chunk, land it in the cache.
-    let stats = fetch_missing_parallel(source, &missing, cache, connections.max(1))?;
+    // 3. Concurrent range fetch, coalesced (adjacent missing chunks of the
+    //    same pack in one Range GET); every chunk is verified individually.
+    let groups = plan_range_groups(missing);
+    let stats = fetch_missing_parallel(source, &groups, cache, connections.max(1))?;
 
     // 4. Reconstruct purely from the (now complete) cache.
     let primaries = crate::reconstruct_streaming(&manifest, cache, output)?;
@@ -245,9 +247,54 @@ pub fn fetch_static(
     Ok((primaries, out))
 }
 
+/// Coalescing bounds (mirror `cavs-fetch`): gaps up to 64 KiB ride along,
+/// one range spans at most 8 MiB.
+const MAX_COALESCE_GAP: u64 = 64 * 1024;
+const MAX_COALESCED_RANGE: u64 = 8 * 1024 * 1024;
+
+/// One Range GET covering a run of missing chunks in the same pack.
+struct RangeGroup {
+    pack: String,
+    start: u64,
+    span: u64,
+    chunks: Vec<ChunkMapEntry>,
+}
+
+/// Sort the missing set by (pack, offset) and group runs whose gaps stay
+/// within [`MAX_COALESCE_GAP`] and span within [`MAX_COALESCED_RANGE`]
+/// (mirrors `cavs_fetch::plan_range_groups`).
+fn plan_range_groups(mut missing: Vec<ChunkMapEntry>) -> Vec<RangeGroup> {
+    missing.sort_by(|a, b| {
+        (a.pack.as_str(), a.pack_offset_abs).cmp(&(b.pack.as_str(), b.pack_offset_abs))
+    });
+    let mut groups: Vec<RangeGroup> = Vec::new();
+    for entry in missing {
+        let end = entry.pack_offset_abs + entry.len_stored as u64;
+        if let Some(g) = groups.last_mut() {
+            let g_end = g.start + g.span;
+            if g.pack == entry.pack
+                && entry.pack_offset_abs >= g_end
+                && entry.pack_offset_abs - g_end <= MAX_COALESCE_GAP
+                && end - g.start <= MAX_COALESCED_RANGE
+            {
+                g.span = end - g.start;
+                g.chunks.push(entry);
+                continue;
+            }
+        }
+        groups.push(RangeGroup {
+            pack: entry.pack.clone(),
+            start: entry.pack_offset_abs,
+            span: entry.len_stored as u64,
+            chunks: vec![entry],
+        });
+    }
+    groups
+}
+
 fn fetch_missing_parallel(
     source: &StaticSource,
-    missing: &[ChunkMapEntry],
+    missing: &[RangeGroup],
     cache: &ChunkCache,
     connections: usize,
 ) -> Result<StaticStats> {
@@ -272,11 +319,11 @@ fn fetch_missing_parallel(
                 if idx >= missing.len() {
                     return;
                 }
-                match fetch_one(source, &missing[idx], cache) {
-                    Ok((raw_len, wire_len)) => {
+                match fetch_group(source, &missing[idx], cache) {
+                    Ok((raw_len, wire_len, chunk_count)) => {
                         wire.fetch_add(wire_len, Ordering::Relaxed);
                         raw.fetch_add(raw_len, Ordering::Relaxed);
-                        fetched.fetch_add(1, Ordering::Relaxed);
+                        fetched.fetch_add(chunk_count, Ordering::Relaxed);
                     }
                     Err(e) => {
                         failed.store(true, Ordering::Relaxed);
@@ -302,38 +349,50 @@ fn fetch_missing_parallel(
     })
 }
 
-/// Range-fetch one stored chunk, decompress if flagged, verify, and cache.
-/// Returns `(raw_len, wire_len)`.
-fn fetch_one(
+/// Fetch one coalesced range; slice, decode, verify and cache every chunk
+/// it covers. Returns `(raw_bytes, wire_bytes, chunks)`.
+fn fetch_group(
     source: &StaticSource,
-    entry: &ChunkMapEntry,
+    group: &RangeGroup,
     cache: &ChunkCache,
-) -> Result<(usize, usize)> {
-    let hash: ChunkHash =
-        from_hex(&entry.hash).with_context(|| format!("bad hash {} in chunk-map", entry.hash))?;
-    let wire = source.get_range(&entry.pack, entry.pack_offset_abs, entry.len_stored as u64)?;
-    let wire_len = wire.len();
-    let mut raw = if entry.flags & CHUNK_FLAG_ZSTD != 0 {
-        zstd::bulk::decompress(&wire, entry.len_raw as usize)
-            .map_err(|e| anyhow::anyhow!("decompressing chunk {}: {e}", entry.hash))?
-    } else {
-        wire
-    };
-    if entry.flags & CHUNK_FLAG_BG4 != 0 {
-        raw = bg4_ungroup(&raw);
-    }
-    if raw.len() != entry.len_raw as usize || hash_chunk(&raw) != hash {
+) -> Result<(usize, usize, usize)> {
+    let wire = source.get_range(&group.pack, group.start, group.span)?;
+    if (wire.len() as u64) < group.span {
         bail!(
-            "{}",
-            ErrorCode::ChunkHashMismatch.msg(format!(
-                "chunk {} failed verification (len {} vs {})",
-                entry.hash,
-                raw.len(),
-                entry.len_raw
-            ))
+            "short range read from {}: got {} of {} bytes",
+            group.pack,
+            wire.len(),
+            group.span
         );
     }
-    let raw_len = raw.len();
-    cache.put(&hash, &raw)?;
-    Ok((raw_len, wire_len))
+    let mut raw_total = 0usize;
+    for entry in &group.chunks {
+        let hash: ChunkHash = from_hex(&entry.hash)
+            .with_context(|| format!("bad hash {} in chunk-map", entry.hash))?;
+        let at = (entry.pack_offset_abs - group.start) as usize;
+        let stored = &wire[at..at + entry.len_stored as usize];
+        let mut raw = if entry.flags & CHUNK_FLAG_ZSTD != 0 {
+            zstd::bulk::decompress(stored, entry.len_raw as usize)
+                .map_err(|e| anyhow::anyhow!("decompressing chunk {}: {e}", entry.hash))?
+        } else {
+            stored.to_vec()
+        };
+        if entry.flags & CHUNK_FLAG_BG4 != 0 {
+            raw = bg4_ungroup(&raw);
+        }
+        if raw.len() != entry.len_raw as usize || hash_chunk(&raw) != hash {
+            bail!(
+                "{}",
+                ErrorCode::ChunkHashMismatch.msg(format!(
+                    "chunk {} failed verification (len {} vs {})",
+                    entry.hash,
+                    raw.len(),
+                    entry.len_raw
+                ))
+            );
+        }
+        raw_total += raw.len();
+        cache.put(&hash, &raw)?;
+    }
+    Ok((raw_total, wire.len(), group.chunks.len()))
 }

@@ -113,7 +113,7 @@ emit_cavs_breakdown() { # emit_cavs_breakdown <scenario> <version> <tree>
   emit "$SC" "$CAVS_SYS" breakdown "$NV" store_pack_data_kb "$(kb_named "$STORE/packs" '*.cavspack')"
   emit "$SC" "$CAVS_SYS" breakdown "$NV" store_pack_index_kb "$(kb_named "$STORE/packs" '*.cavsindex')"
   emit "$SC" "$CAVS_SYS" breakdown "$NV" store_meta_kb \
-    "$(( $(kb "$STORE/assets") + $(kb_named "$STORE" 'index.json') ))"
+    "$(( $(kb "$STORE/assets") + $(kb_named "$STORE" 'index.*') ))"
   emit "$SC" "$CAVS_SYS" breakdown "$NV" export_pack_kb "$(kb "$TREE/chunks/packs")"
   emit "$SC" "$CAVS_SYS" breakdown "$NV" export_index_kb "$(kb "$TREE/chunks/indexes")"
   emit "$SC" "$CAVS_SYS" breakdown "$NV" export_manifest_kb "$(kb_named "$TREE/assets" 'manifest.json')"

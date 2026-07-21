@@ -215,10 +215,12 @@ fn fetch_static_inner(
         })?;
         missing.push(loc.clone());
     }
-    let total_wire: u64 = missing.iter().map(|m| m.len_stored as u64).sum();
 
-    // 3. Concurrent range fetch.
-    let stats = fetch_missing_parallel(source, &missing, &cache, opts, total_wire)?;
+    // 3. Concurrent range fetch, coalesced: adjacent missing chunks of the
+    //    same pack travel in one Range GET instead of one request per chunk.
+    let groups = plan_range_groups(missing);
+    let total_wire: u64 = groups.iter().map(|g| g.span).sum();
+    let stats = fetch_missing_parallel(source, &groups, &cache, opts, total_wire)?;
 
     // 4. Reconstruct from cache.
     reconstruct::reconstruct(&manifest, &cache, output)?;
@@ -230,9 +232,63 @@ fn fetch_static_inner(
     })
 }
 
+/// Tolerated gap between two missing chunks fetched in one range: the extra
+/// bytes cost less than another round-trip (mirrors the store's read
+/// coalescing).
+const MAX_COALESCE_GAP: u64 = 64 * 1024;
+
+/// Upper bound of one coalesced range: keeps per-request memory bounded and
+/// requests parallelizable across connections.
+const MAX_COALESCED_RANGE: u64 = 8 * 1024 * 1024;
+
+/// One Range GET covering a run of missing chunks in the same pack.
+struct RangeGroup {
+    pack: String,
+    /// Absolute offset of the first chunk.
+    start: u64,
+    /// Bytes to request (last chunk end − start, gaps included).
+    span: u64,
+    chunks: Vec<ChunkMapEntry>,
+}
+
+/// Group the missing set into coalesced ranges: sort by (pack, offset), then
+/// extend the current run while the gap to the next chunk is at most
+/// [`MAX_COALESCE_GAP`] and the total span stays within
+/// [`MAX_COALESCED_RANGE`]. A push writes related chunks contiguously, so a
+/// cold or update fetch typically collapses thousands of per-chunk requests
+/// into a few dozen ranges.
+fn plan_range_groups(mut missing: Vec<ChunkMapEntry>) -> Vec<RangeGroup> {
+    missing.sort_by(|a, b| {
+        (a.pack.as_str(), a.pack_offset_abs).cmp(&(b.pack.as_str(), b.pack_offset_abs))
+    });
+    let mut groups: Vec<RangeGroup> = Vec::new();
+    for entry in missing {
+        let end = entry.pack_offset_abs + entry.len_stored as u64;
+        if let Some(g) = groups.last_mut() {
+            let g_end = g.start + g.span;
+            if g.pack == entry.pack
+                && entry.pack_offset_abs >= g_end
+                && entry.pack_offset_abs - g_end <= MAX_COALESCE_GAP
+                && end - g.start <= MAX_COALESCED_RANGE
+            {
+                g.span = end - g.start;
+                g.chunks.push(entry);
+                continue;
+            }
+        }
+        groups.push(RangeGroup {
+            pack: entry.pack.clone(),
+            start: entry.pack_offset_abs,
+            span: entry.len_stored as u64,
+            chunks: vec![entry],
+        });
+    }
+    groups
+}
+
 fn fetch_missing_parallel(
     source: &StaticSource,
-    missing: &[ChunkMapEntry],
+    missing: &[RangeGroup],
     cache: &ChunkCache,
     opts: &FetchOptions,
     total_wire: u64,
@@ -269,11 +325,11 @@ fn fetch_missing_parallel(
                 if idx >= missing.len() {
                     return;
                 }
-                match fetch_one(source, &missing[idx], cache) {
-                    Ok((raw_len, wire_len)) => {
+                match fetch_group(source, &missing[idx], cache) {
+                    Ok((raw_len, wire_len, chunk_count)) => {
                         wire.fetch_add(wire_len, Ordering::Relaxed);
                         raw.fetch_add(raw_len, Ordering::Relaxed);
-                        fetched.fetch_add(1, Ordering::Relaxed);
+                        fetched.fetch_add(chunk_count, Ordering::Relaxed);
                         if let Some(p) = opts.progress {
                             p(wire.load(Ordering::Relaxed) as u64, total_wire);
                         }
@@ -302,33 +358,49 @@ fn fetch_missing_parallel(
     })
 }
 
-fn fetch_one(
+/// Fetch one coalesced range and land every chunk it covers: slice each
+/// chunk out of the response, decode, BLAKE3-verify and cache it. The
+/// coalescing never weakens verification — every chunk is still checked
+/// against its own hash. Returns `(raw_bytes, wire_bytes, chunks)`.
+fn fetch_group(
     source: &StaticSource,
-    entry: &ChunkMapEntry,
+    group: &RangeGroup,
     cache: &ChunkCache,
-) -> Result<(usize, usize)> {
-    let hash: ChunkHash =
-        from_hex(&entry.hash).with_context(|| format!("bad hash {} in chunk-map", entry.hash))?;
-    let wire = source.get_range(&entry.pack, entry.pack_offset_abs, entry.len_stored as u64)?;
-    let wire_len = wire.len();
-    let mut raw = if entry.flags & CHUNK_FLAG_ZSTD != 0 {
-        zstd::bulk::decompress(&wire, entry.len_raw as usize)
-            .map_err(|e| anyhow::anyhow!("decompressing chunk {}: {e}", entry.hash))?
-    } else {
-        wire
-    };
-    if entry.flags & CHUNK_FLAG_BG4 != 0 {
-        raw = bg4_ungroup(&raw);
-    }
-    if raw.len() != entry.len_raw as usize || hash_chunk(&raw) != hash {
+) -> Result<(usize, usize, usize)> {
+    let wire = source.get_range(&group.pack, group.start, group.span)?;
+    if (wire.len() as u64) < group.span {
         bail!(
-            "CAVS-E-CHUNK-HASH-MISMATCH: chunk {} failed verification",
-            entry.hash
+            "short range read from {}: got {} of {} bytes",
+            group.pack,
+            wire.len(),
+            group.span
         );
     }
-    let raw_len = raw.len();
-    cache.put(&hash, &raw)?;
-    Ok((raw_len, wire_len))
+    let mut raw_total = 0usize;
+    for entry in &group.chunks {
+        let hash: ChunkHash = from_hex(&entry.hash)
+            .with_context(|| format!("bad hash {} in chunk-map", entry.hash))?;
+        let at = (entry.pack_offset_abs - group.start) as usize;
+        let stored = &wire[at..at + entry.len_stored as usize];
+        let mut raw = if entry.flags & CHUNK_FLAG_ZSTD != 0 {
+            zstd::bulk::decompress(stored, entry.len_raw as usize)
+                .map_err(|e| anyhow::anyhow!("decompressing chunk {}: {e}", entry.hash))?
+        } else {
+            stored.to_vec()
+        };
+        if entry.flags & CHUNK_FLAG_BG4 != 0 {
+            raw = bg4_ungroup(&raw);
+        }
+        if raw.len() != entry.len_raw as usize || hash_chunk(&raw) != hash {
+            bail!(
+                "CAVS-E-CHUNK-HASH-MISMATCH: chunk {} failed verification",
+                entry.hash
+            );
+        }
+        raw_total += raw.len();
+        cache.put(&hash, &raw)?;
+    }
+    Ok((raw_total, wire.len(), group.chunks.len()))
 }
 
 /// Every unique chunk hash the manifest references (init + segment chunks).
@@ -397,4 +469,56 @@ fn decode_hex(s: &str, len: usize) -> Result<Vec<u8>> {
     (0..len)
         .map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).context("bad hex"))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(pack: &str, offset: u64, len: u32) -> ChunkMapEntry {
+        ChunkMapEntry {
+            hash: format!("{pack}-{offset}"),
+            len_raw: len,
+            len_stored: len,
+            flags: 0,
+            pack: pack.to_string(),
+            pack_offset_abs: offset,
+        }
+    }
+
+    #[test]
+    fn adjacent_chunks_coalesce_into_one_range() {
+        let groups = plan_range_groups(vec![
+            entry("p", 100, 50),
+            entry("p", 150, 50),
+            // 64 KiB gap is still tolerated
+            entry("p", 200 + MAX_COALESCE_GAP, 10),
+        ]);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].start, 100);
+        assert_eq!(groups[0].span, 100 + MAX_COALESCE_GAP + 10);
+        assert_eq!(groups[0].chunks.len(), 3);
+    }
+
+    #[test]
+    fn gap_pack_and_span_limits_split_groups() {
+        let groups = plan_range_groups(vec![
+            entry("p", 0, 10),
+            entry("p", 10 + MAX_COALESCE_GAP + 1, 10), // gap too large
+            entry("q", 0, 10),                         // different pack
+        ]);
+        assert_eq!(groups.len(), 3);
+
+        // Span cap: two large chunks that would exceed the max stay apart.
+        let half = (MAX_COALESCED_RANGE / 2 + 1) as u32;
+        let groups = plan_range_groups(vec![entry("p", 0, half), entry("p", half as u64, half)]);
+        assert_eq!(groups.len(), 2);
+    }
+
+    #[test]
+    fn unsorted_input_is_sorted_before_grouping() {
+        let groups = plan_range_groups(vec![entry("p", 60, 40), entry("p", 0, 60)]);
+        assert_eq!(groups.len(), 1);
+        assert_eq!((groups[0].start, groups[0].span), (0, 100));
+    }
 }
