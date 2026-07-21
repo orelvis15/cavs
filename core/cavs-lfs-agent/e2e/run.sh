@@ -27,6 +27,9 @@ if [ -z "$AGENT" ]; then
   AGENT="$REPO_ROOT/target/debug/cavs-lfs-agent"
 fi
 [ -x "$AGENT" ] || { echo "FAIL: agent binary not found at $AGENT"; exit 1; }
+# Absolutize: git-lfs resolves lfs.customtransfer.<n>.path relative to the
+# repository it runs in, not to our cwd.
+AGENT="$(cd "$(dirname "$AGENT")" && pwd)/$(basename "$AGENT")"
 echo "[e2e] agent: $AGENT"
 
 WORK=$(mktemp -d)
