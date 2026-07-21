@@ -6,6 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] — Git LFS transfer agent
+
+Everything below is measured in the frozen `benchmark-v1`
+(`core/cavs-lfs-agent/bench/RESULTS.md`, raw data committed): vs vanilla
+Git LFS, −76…−90 % storage (single copy) and −52…−97 % update download on
+versioned binaries, warm clones at 0 new bytes, cross-repo dedup −89 %;
+14/14 sha256 verification gates.
+
 ### Added
 
 - **Git LFS transfer agent (new crate `cavs-lfs-agent`).** A Git LFS
@@ -23,8 +31,25 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `http(s)://` remotes are read-only for CDN-served clones. Protocol-level
   integration tests plus a real git+git-lfs e2e (`core/cavs-lfs-agent/e2e/`,
   also a CI job). See [docs/GIT_LFS.md](docs/GIT_LFS.md).
+- **Size-tiered automatic chunking profile** in the agent (`--profile auto`,
+  the default): <128 MiB → fastcdc-16k, <512 MiB → fastcdc-64k, else
+  fastcdc-128k — tuned from the committed profile sweep; a pure function of
+  size so chunk boundaries (and cross-version dedup) stay stable.
+- **Benchmark harness + frozen `benchmark-v1`**
+  (`core/cavs-lfs-agent/bench/`): plain git vs vanilla Git LFS vs the CAVS
+  agent over deterministic datasets — storage, per-version growth, update /
+  cold / warm-clone download, storage breakdown, cross-repo dedup, and
+  crash-recovery tests (agent killed mid-upload/mid-download; store
+  self-repairs).
+- `GlobalStore::export_asset()` — incremental single-asset export
+  (missing packs + that asset's record/chunk-map/manifest), O(asset) not
+  O(store).
 
 ### Changed
+
+- **Per-asset export + session-scoped store in the agent**: one lock and
+  one store open per push session; each upload exports only its own asset.
+  250-object push: 19.9 s → 6.5 s.
 
 - **Shared ingest/manifest library APIs (refactor).** `cavs store add`'s
   container→store ingest moved into `cavs-format` as
