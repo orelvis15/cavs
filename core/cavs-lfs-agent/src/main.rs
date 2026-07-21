@@ -17,8 +17,10 @@
 mod download;
 mod protocol;
 mod remote;
+mod store_sync;
+mod upload;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use protocol::{Complete, Event, InitResult, ProtoError, ProtoOut, CODE_GENERIC, CODE_NOT_FOUND};
 use remote::Remote;
@@ -71,6 +73,25 @@ struct Session {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    // Fail fast on bad session-wide upload config, before speaking protocol.
+    let (mode, profile_label) =
+        upload::parse_profile(&args.profile).context("invalid --profile")?;
+    let (compress, zstd_level) =
+        upload::parse_compression(&args.compression).context("invalid --compression")?;
+    let sign_key = args
+        .sign_key
+        .as_deref()
+        .map(upload::load_sign_key)
+        .transpose()?;
+    let upload_cfg = upload::UploadCfg {
+        mode,
+        profile_label,
+        compress,
+        zstd_level,
+        sign_key,
+    };
+
     let out = ProtoOut::stdout();
     let stdin = std::io::stdin();
 
@@ -93,8 +114,8 @@ fn main() -> Result<()> {
         match event {
             Event::Init(init) => {
                 eprintln!(
-                    "[lfs-agent] init: operation={} remote={:?}",
-                    init.operation, init.remote
+                    "[lfs-agent] init: operation={} remote={:?} concurrent={} transfers={}",
+                    init.operation, init.remote, init.concurrent, init.concurrenttransfers
                 );
                 let resolved =
                     remote::resolve(args.remote.as_deref(), &init.remote).and_then(|remote| {
@@ -165,10 +186,33 @@ fn main() -> Result<()> {
                 }
             }
             Event::Upload(ul) => {
-                out.send(&Complete::err(
-                    &ul.oid,
-                    ProtoError::new(CODE_GENERIC, "upload not implemented yet"),
-                ));
+                let Some(session) = session.as_ref() else {
+                    out.send(&Complete::err(
+                        &ul.oid,
+                        ProtoError::new(CODE_GENERIC, "protocol error: upload before init"),
+                    ));
+                    continue;
+                };
+                let Remote::Dir { tree, store } = &session.remote else {
+                    out.send(&Complete::err(
+                        &ul.oid,
+                        ProtoError::new(
+                            CODE_GENERIC,
+                            "remote is read-only (http); uploads need a directory remote",
+                        ),
+                    ));
+                    continue;
+                };
+                match upload::handle(tree, store, &ul.oid, &ul.path, ul.size, &upload_cfg, &out) {
+                    Ok(()) => out.send(&Complete::ok_upload(&ul.oid)),
+                    Err(e) => {
+                        eprintln!("[lfs-agent] upload {} failed: {e:#}", ul.oid);
+                        out.send(&Complete::err(
+                            &ul.oid,
+                            ProtoError::new(CODE_GENERIC, format!("{e:#}")),
+                        ));
+                    }
+                }
             }
             Event::Terminate => {
                 eprintln!("[lfs-agent] terminate");

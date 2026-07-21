@@ -61,7 +61,9 @@ pub struct UploadEvent {
 #[derive(Debug, Deserialize)]
 pub struct DownloadEvent {
     pub oid: String,
+    /// Advisory: the fetch derives real totals from the chunk map.
     #[serde(default)]
+    #[allow(dead_code)]
     pub size: u64,
 }
 
