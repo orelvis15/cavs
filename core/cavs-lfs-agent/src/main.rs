@@ -79,6 +79,63 @@ struct Session {
     /// Lock + open store, created on the first upload and reused for the
     /// whole push session (one store open per push, not per object).
     write: Option<store_sync::WriteSession>,
+    /// Session-wide metadata resolver: L1/L2 caches + meta-pack prefetch
+    /// shared across every download of this process.
+    resolver: cavs_fetch::MetadataResolver,
+    /// Aggregate download stats for the terminate-time breakdown.
+    downloads: u64,
+    agg: cavs_fetch::FetchStats,
+}
+
+impl Session {
+    fn add_download(&mut self, stats: &cavs_fetch::FetchStats) {
+        self.downloads += 1;
+        let a = &mut self.agg;
+        a.wire_bytes += stats.wire_bytes;
+        a.raw_bytes += stats.raw_bytes;
+        a.fetched += stats.fetched;
+        a.reused += stats.reused;
+        a.logical_bytes += stats.logical_bytes;
+        a.requests += stats.requests;
+        a.useful_bytes += stats.useful_bytes;
+        a.selective_retries += stats.selective_retries;
+        a.throttle_waits += stats.throttle_waits;
+        a.metadata_requests += stats.metadata_requests;
+        a.metadata_ms += stats.metadata_ms;
+        a.plan_ms += stats.plan_ms;
+        a.payload_ms += stats.payload_ms;
+        a.reconstruct_ms += stats.reconstruct_ms;
+    }
+
+    /// The Round 3A phase breakdown: where a many-object session actually
+    /// spent its time, so metadata cost is visible instead of folded into
+    /// one opaque wall time.
+    fn print_summary(&self) {
+        if self.downloads == 0 {
+            return;
+        }
+        let m = self.resolver.stats();
+        eprintln!(
+            "[lfs-agent] session: {} downloads | metadata {} req / {} ms \
+             (l1 {} l2 {} packs {} prefetched {} fallbacks {}) | \
+             payload {} req / {} ms | plan {} ms | reconstruct {} ms | \
+             {} wire bytes / {} useful",
+            self.downloads,
+            self.agg.metadata_requests,
+            self.agg.metadata_ms,
+            m.l1_hits,
+            m.l2_hits,
+            m.pack_fetches,
+            m.prefetched,
+            m.fallback_singles,
+            self.agg.requests,
+            self.agg.payload_ms,
+            self.agg.plan_ms,
+            self.agg.reconstruct_ms,
+            self.agg.wire_bytes,
+            self.agg.useful_bytes,
+        );
+    }
 }
 
 fn main() -> Result<()> {
@@ -145,11 +202,15 @@ fn main() -> Result<()> {
                             "[lfs-agent] remote: {remote:?}, cache: {}",
                             cache_dir.display()
                         );
+                        let resolver = cavs_fetch::MetadataResolver::new(&cache_dir);
                         session = Some(Session {
                             remote,
                             cache_dir,
                             tempdirs: Vec::new(),
                             write: None,
+                            resolver,
+                            downloads: 0,
+                            agg: cavs_fetch::FetchStats::default(),
                         });
                         out.send(&InitResult::default());
                     }
@@ -188,9 +249,11 @@ fn main() -> Result<()> {
                     &tmp_root,
                     args.connections,
                     args.pubkey.as_deref(),
+                    &session.resolver,
                     &out,
                 ) {
-                    Ok((path, tmpdir)) => {
+                    Ok((path, tmpdir, stats)) => {
+                        session.add_download(&stats);
                         out.send(&Complete::ok_download(&dl.oid, &path));
                         session.tempdirs.push(tmpdir);
                     }
@@ -260,6 +323,7 @@ fn main() -> Result<()> {
     // the next push simply re-ingests. An error here is fatal — the push
     // must not look successful with nothing published.
     if let Some(session) = session.as_mut() {
+        session.print_summary();
         if let Some(write) = session.write.as_mut() {
             let n = write.pending_exports.len();
             write

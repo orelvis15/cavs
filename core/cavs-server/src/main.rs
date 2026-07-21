@@ -91,6 +91,7 @@ async fn main() -> Result<()> {
         .route("/api/assets/{asset}/bootstrap", get(get_bootstrap))
         .route("/api/assets/{asset}/chunks/{hash}", get(get_chunk))
         .route("/api/sessions/{session}/batch", post(batch))
+        .route("/v1/metadata/batch", post(metadata_batch))
         .route("/hls/{asset}/{track}/{file}", get(hls_file))
         .route("/web", get(web_index))
         .route("/web/player.js", get(web_js))
@@ -263,6 +264,44 @@ async fn batch(
         .plan_batch(&session, &req)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     Ok(([(header::CONTENT_TYPE, "application/octet-stream")], bytes).into_response())
+}
+
+/// Objects a metadata-batch request may carry; keeps one slow/huge batch
+/// from monopolizing the server (clients split larger sets).
+const MAX_METADATA_BATCH_OBJECTS: usize = 128;
+
+#[derive(serde::Deserialize)]
+struct MetadataBatchRequest {
+    objects: Vec<MetadataBatchObject>,
+}
+
+#[derive(serde::Deserialize)]
+struct MetadataBatchObject {
+    oid: String,
+    // `size`, `capabilities`, … are accepted and ignored (schema v1).
+}
+
+/// Round 3A: resolve many objects' metadata in one round-trip. Response is
+/// partial per object (`available` | `missing`), never all-or-nothing.
+async fn metadata_batch(
+    State(state): State<SharedState>,
+    Json(req): Json<MetadataBatchRequest>,
+) -> Result<Response, AppError> {
+    if req.objects.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "empty objects list".into()));
+    }
+    if req.objects.len() > MAX_METADATA_BATCH_OBJECTS {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "batch of {} objects exceeds the {MAX_METADATA_BATCH_OBJECTS}-object limit",
+                req.objects.len()
+            ),
+        ));
+    }
+    let oids: Vec<String> = req.objects.into_iter().map(|o| o.oid).collect();
+    let body = state.metadata_batch(&oids);
+    Ok(Json(body).into_response())
 }
 
 /// Full bootstrap artifact (whole asset, zstd): the cold-install fast path.

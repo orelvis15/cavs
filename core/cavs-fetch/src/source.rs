@@ -29,6 +29,38 @@ impl StaticSource {
         }
     }
 
+    /// Like [`Self::get_all`], but a definitive "not there" (HTTP 404/410,
+    /// or a missing file) is `Ok(None)` instead of an error, so callers can
+    /// negative-cache absence without conflating it with transport failures.
+    pub(crate) fn get_all_opt(&self, rel: &str) -> Result<Option<Vec<u8>>> {
+        match self {
+            StaticSource::Http { base, agent } => {
+                let url = format!("{base}/{rel}");
+                match agent.get(&url).call() {
+                    Ok(resp) => {
+                        let mut out = Vec::new();
+                        resp.into_reader()
+                            .read_to_end(&mut out)
+                            .with_context(|| format!("reading {url}"))?;
+                        Ok(Some(out))
+                    }
+                    Err(ureq::Error::Status(404 | 410, _)) => Ok(None),
+                    Err(e) => Err(anyhow::anyhow!("GET {url}: {e}")),
+                }
+            }
+            StaticSource::Dir(root) => {
+                let path = root.join(rel);
+                match std::fs::read(&path) {
+                    Ok(bytes) => Ok(Some(bytes)),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                    Err(e) => {
+                        Err(anyhow::Error::new(e).context(format!("reading {}", path.display())))
+                    }
+                }
+            }
+        }
+    }
+
     pub(crate) fn get_all(&self, rel: &str) -> Result<Vec<u8>> {
         match self {
             StaticSource::Http { base, agent } => {

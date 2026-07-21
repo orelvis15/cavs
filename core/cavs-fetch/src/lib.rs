@@ -20,10 +20,12 @@
 //! ABI, which is what the Unity and Unreal plugins call.
 
 mod cache;
+mod meta;
 mod reconstruct;
 mod source;
 
 pub use cache::ChunkCache;
+pub use meta::{MetaStats, MetadataResolver};
 pub use source::StaticSource;
 
 use anyhow::{bail, Context, Result};
@@ -103,6 +105,17 @@ pub struct FetchStats {
     pub selective_retries: u64,
     /// Times a worker had to wait on the global inflight-byte budget.
     pub throttle_waits: u64,
+    /// Metadata requests this fetch issued (manifest/chunk-map/meta-pack);
+    /// 0 when everything came from the resolver's caches.
+    pub metadata_requests: u64,
+    /// Wall time resolving metadata, in milliseconds.
+    pub metadata_ms: u64,
+    /// Wall time planning ranges (missing-set + coalescing), in ms.
+    pub plan_ms: u64,
+    /// Wall time downloading + decoding + caching payload, in ms.
+    pub payload_ms: u64,
+    /// Wall time reconstructing the output from the cache, in ms.
+    pub reconstruct_ms: u64,
 }
 
 /// A fetch failure with a stable reason, so an embedder can decide
@@ -129,20 +142,20 @@ impl From<anyhow::Error> for FetchError {
 }
 
 #[derive(Debug, Deserialize)]
-struct ChunkMapFile {
+pub(crate) struct ChunkMapFile {
     #[allow(dead_code)]
-    asset: String,
-    chunks: Vec<ChunkMapEntry>,
+    pub(crate) asset: String,
+    pub(crate) chunks: Vec<ChunkMapEntry>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-struct ChunkMapEntry {
-    hash: String,
-    len_raw: u32,
-    len_stored: u32,
-    flags: u32,
-    pack: String,
-    pack_offset_abs: u64,
+#[derive(Debug, Deserialize, serde::Serialize, Clone)]
+pub(crate) struct ChunkMapEntry {
+    pub(crate) hash: String,
+    pub(crate) len_raw: u32,
+    pub(crate) len_stored: u32,
+    pub(crate) flags: u32,
+    pub(crate) pack: String,
+    pub(crate) pack_offset_abs: u64,
 }
 
 /// Fetch `asset` from the static tree at `source` into `output`, caching in
@@ -155,7 +168,26 @@ pub fn fetch_static(
     cache_dir: &Path,
     opts: &FetchOptions,
 ) -> std::result::Result<FetchStats, FetchError> {
-    fetch_static_inner(source, asset, output, cache_dir, opts).map_err(|e| {
+    // An ephemeral resolver still gets meta-pack batching and the on-disk
+    // L2 cache; only the in-process L1 is lost across calls. Long-lived
+    // embedders should hold a [`MetadataResolver`] and use
+    // [`fetch_static_with_resolver`].
+    let resolver = MetadataResolver::new(cache_dir);
+    fetch_static_with_resolver(source, asset, output, cache_dir, opts, &resolver)
+}
+
+/// [`fetch_static`] with a caller-held [`MetadataResolver`], so a session
+/// fetching many assets from one remote shares its metadata caches and
+/// meta-pack prefetches across objects.
+pub fn fetch_static_with_resolver(
+    source: &StaticSource,
+    asset: &str,
+    output: &Path,
+    cache_dir: &Path,
+    opts: &FetchOptions,
+    resolver: &MetadataResolver,
+) -> std::result::Result<FetchStats, FetchError> {
+    fetch_static_inner(source, asset, output, cache_dir, opts, resolver).map_err(|e| {
         // Preserve an explicit cancellation as such.
         if e.downcast_ref::<Cancelled>().is_some() {
             FetchError::Cancelled
@@ -184,35 +216,31 @@ fn fetch_static_inner(
     output: &Path,
     cache_dir: &Path,
     opts: &FetchOptions,
+    resolver: &MetadataResolver,
 ) -> Result<FetchStats> {
     let cache = ChunkCache::open(cache_dir)?;
 
-    // 1. Manifest + chunk-map.
-    let manifest_bytes = source
-        .get_all(&format!("assets/{asset}/manifest.json"))
-        .with_context(|| format!("asset {asset}: no manifest.json in the static tree"))?;
-    let manifest: cavs_proto::Manifest =
-        serde_json::from_slice(&manifest_bytes).context("parsing manifest.json")?;
+    // 1. Metadata: manifest + chunk locations, through the batching
+    //    resolver (meta-packs, L1/L2 caches, per-asset fallback).
+    let t = std::time::Instant::now();
+    let meta_before = resolver.stats().requests;
+    let meta = resolver.resolve(source, asset)?;
+    let metadata_requests = resolver.stats().requests - meta_before;
+    let metadata_ms = t.elapsed().as_millis() as u64;
+    let manifest = &meta.manifest;
 
     if let Some(pk) = &opts.pubkey {
-        verify_signature(&manifest, pk)?;
+        verify_signature(manifest, pk)?;
     }
 
-    let map_bytes = source
-        .get_all(&format!("assets/{asset}/chunk-map.json"))
-        .with_context(|| format!("asset {asset}: no chunk-map.json in the static tree"))?;
-    let map: ChunkMapFile = serde_json::from_slice(&map_bytes).context("parsing chunk-map.json")?;
-    let locations: HashMap<String, ChunkMapEntry> = map
-        .chunks
-        .into_iter()
-        .map(|c| (c.hash.clone(), c))
-        .collect();
-
     // 2. Missing set.
+    let t = std::time::Instant::now();
+    let locations: HashMap<&str, &ChunkMapEntry> =
+        meta.chunks.iter().map(|c| (c.hash.as_str(), c)).collect();
     let mut seen = std::collections::HashSet::new();
     let mut missing: Vec<ChunkMapEntry> = Vec::new();
     let mut reused = 0u64;
-    for hex in manifest_chunk_hashes(&manifest) {
+    for hex in manifest_chunk_hashes(manifest) {
         if !seen.insert(hex.clone()) {
             continue;
         }
@@ -220,24 +248,34 @@ fn fetch_static_inner(
             reused += 1;
             continue;
         }
-        let loc = locations.get(&hex).with_context(|| {
+        let loc = locations.get(hex.as_str()).with_context(|| {
             format!("chunk {hex} referenced by manifest but absent from chunk-map")
         })?;
-        missing.push(loc.clone());
+        missing.push((*loc).clone());
     }
 
     // 3. Concurrent range fetch, coalesced: adjacent missing chunks of the
     //    same pack travel in one Range GET instead of one request per chunk.
     let groups = plan_range_groups(missing);
+    let plan_ms = t.elapsed().as_millis() as u64;
+    let t = std::time::Instant::now();
     let total_wire: u64 = groups.iter().map(|g| g.span).sum();
     let stats = fetch_missing_parallel(source, &groups, &cache, opts, total_wire)?;
+    let payload_ms = t.elapsed().as_millis() as u64;
 
     // 4. Reconstruct from cache.
-    reconstruct::reconstruct(&manifest, &cache, output)?;
+    let t = std::time::Instant::now();
+    reconstruct::reconstruct(manifest, &cache, output)?;
+    let reconstruct_ms = t.elapsed().as_millis() as u64;
 
     Ok(FetchStats {
         reused,
-        logical_bytes: reconstruct::logical_bytes(&manifest),
+        logical_bytes: reconstruct::logical_bytes(manifest),
+        metadata_requests,
+        metadata_ms,
+        plan_ms,
+        payload_ms,
+        reconstruct_ms,
         ..stats
     })
 }

@@ -65,16 +65,23 @@ pub fn open_session(tree: &Path, store_dir: &Path) -> Result<WriteSession> {
 impl WriteSession {
     /// Commit the batched publishes (one pack close + one `index.json`
     /// write for the whole push) and export every asset uploaded this
-    /// session into the static tree. Idempotent.
+    /// session into the static tree, plus one session **meta-pack**
+    /// (manifest + chunk-map of every uploaded object in a single
+    /// artifact) so clones resolve the whole push's metadata in a couple
+    /// of requests. Idempotent.
     pub fn finalize(&mut self) -> Result<()> {
         self.store
             .commit_publish_batch()
             .context("committing publish batch")?;
-        for oid in std::mem::take(&mut self.pending_exports) {
+        let oids = std::mem::take(&mut self.pending_exports);
+        for oid in &oids {
             self.store
-                .export_asset(&oid, &self.tree)
+                .export_asset(oid, &self.tree)
                 .with_context(|| format!("exporting {oid}"))?;
         }
+        self.store
+            .export_meta_pack(&oids, &self.tree)
+            .context("exporting session meta-pack")?;
         Ok(())
     }
 }

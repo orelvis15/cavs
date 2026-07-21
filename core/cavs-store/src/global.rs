@@ -1066,9 +1066,10 @@ impl GlobalStore {
         Ok(written)
     }
 
-    /// Write `assets/<name>/chunk-map.json` for one asset; returns the
-    /// relative path written.
-    fn write_chunk_map(&self, name: &str, out: &Path) -> Result<String> {
+    /// The chunk-map entries of one asset (every chunk it references,
+    /// mapped to its immutable pack file and byte range), as published in
+    /// `chunk-map.json` and in session meta-packs.
+    fn chunk_map_entries(&self, name: &str) -> Result<Vec<serde_json::Value>> {
         let hexes = self
             .index
             .assets
@@ -1099,6 +1100,13 @@ impl GlobalStore {
                 "pack_offset_abs": packfile::PACK_HEADER_LEN + pack_offset,
             }));
         }
+        Ok(chunks)
+    }
+
+    /// Write `assets/<name>/chunk-map.json` for one asset; returns the
+    /// relative path written.
+    fn write_chunk_map(&self, name: &str, out: &Path) -> Result<String> {
+        let chunks = self.chunk_map_entries(name)?;
         let rel = format!("assets/{name}/chunk-map.json");
         let dst = out.join(&rel);
         std::fs::create_dir_all(dst.parent().unwrap())?;
@@ -1184,6 +1192,70 @@ impl GlobalStore {
         written.push(rel);
 
         Ok(written)
+    }
+
+    /// Round 3A: publish one **session meta-pack** into the export tree —
+    /// a single zstd-compressed artifact carrying the manifest + chunk-map
+    /// of every asset in `names` — and update `meta/index.json` (oid →
+    /// pack). A client resolving any one of these assets downloads the
+    /// pack once and has the metadata of every sibling of the push, so a
+    /// many-object clone spends a handful of metadata round-trips instead
+    /// of two per object.
+    ///
+    /// The pack is content-addressed (BLAKE3 of its bytes) and immutable;
+    /// the index is rewritten atomically and, when unreadable, rebuilt by
+    /// scanning the packs themselves. Returns the new pack's id, or `None`
+    /// when `names` is empty.
+    pub fn export_meta_pack(&self, names: &[String], out: &Path) -> Result<Option<String>> {
+        if names.is_empty() {
+            return Ok(None);
+        }
+        let mut objects = Vec::with_capacity(names.len());
+        for name in names {
+            objects.push(serde_json::json!({
+                "oid": name,
+                "manifest": self.asset_manifest(name)?,
+                "chunks": self.chunk_map_entries(name)?,
+            }));
+        }
+        let raw = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "objects": objects,
+        }))?;
+        let compressed = zstd::bulk::compress(&raw, 9)
+            .map_err(|e| StoreError::NotExportable(format!("compressing meta-pack: {e}")))?;
+        let id = cavs_hash::to_hex(&cavs_hash::hash_chunk(&compressed));
+
+        let packs_dir = out.join("meta").join("packs");
+        std::fs::create_dir_all(&packs_dir)?;
+        let dst = packs_dir.join(format!("{id}.cmeta"));
+        if !dst.exists() {
+            let tmp = packs_dir.join(format!("{id}.cmeta.tmp"));
+            std::fs::write(&tmp, &compressed)?;
+            std::fs::rename(&tmp, &dst)?;
+        }
+
+        // Update the oid → pack index: append this pack, atomically.
+        let index_path = out.join("meta").join("index.json");
+        let mut index = read_or_rebuild_meta_index(&index_path, &packs_dir);
+        index.retain(|p| p.id != id);
+        index.push(MetaIndexEntry {
+            id: id.clone(),
+            oids: names.to_vec(),
+        });
+        let generation = 1 + index.len() as u64;
+        let doc = serde_json::json!({
+            "version": 1,
+            "generation": generation,
+            "packs": index
+                .iter()
+                .map(|p| serde_json::json!({ "id": p.id, "oids": p.oids }))
+                .collect::<Vec<_>>(),
+        });
+        let tmp = index_path.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_vec(&doc)?)?;
+        std::fs::rename(&tmp, &index_path)?;
+        Ok(Some(id))
     }
 
     /// Build the runtime [`cavs_proto::Manifest`] for a stored asset (the
@@ -1591,6 +1663,87 @@ fn copy_if_different(src: &Path, dst: &Path) -> Result<bool> {
     Ok(!same)
 }
 
+/// One `meta/index.json` entry: a session meta-pack and the oids it holds.
+struct MetaIndexEntry {
+    id: String,
+    oids: Vec<String>,
+}
+
+/// Read the meta index, or rebuild it by scanning `meta/packs/*.cmeta` when
+/// it is missing or unreadable (the packs are the source of truth; the
+/// index is a derived accelerator, so corruption self-heals).
+fn read_or_rebuild_meta_index(index_path: &Path, packs_dir: &Path) -> Vec<MetaIndexEntry> {
+    if let Ok(bytes) = std::fs::read(index_path) {
+        if let Ok(doc) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            if doc.get("version").and_then(|v| v.as_u64()) == Some(1) {
+                if let Some(packs) = doc.get("packs").and_then(|p| p.as_array()) {
+                    let mut out = Vec::with_capacity(packs.len());
+                    for p in packs {
+                        let (Some(id), Some(oids)) = (
+                            p.get("id").and_then(|v| v.as_str()),
+                            p.get("oids").and_then(|v| v.as_array()),
+                        ) else {
+                            continue;
+                        };
+                        out.push(MetaIndexEntry {
+                            id: id.to_string(),
+                            oids: oids
+                                .iter()
+                                .filter_map(|o| o.as_str().map(str::to_string))
+                                .collect(),
+                        });
+                    }
+                    return out;
+                }
+            }
+        }
+    }
+    // Rebuild from the packs themselves. Sort by mtime so "later pack wins"
+    // still resolves re-pushed oids to their newest metadata.
+    let mut found: Vec<(std::time::SystemTime, MetaIndexEntry)> = Vec::new();
+    let Ok(entries) = std::fs::read_dir(packs_dir) else {
+        return Vec::new();
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("cmeta") {
+            continue;
+        }
+        let Some(id) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let Ok(compressed) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok(raw) = zstd::bulk::decompress(&compressed, 256 * 1024 * 1024) else {
+            continue;
+        };
+        let Ok(doc) = serde_json::from_slice::<serde_json::Value>(&raw) else {
+            continue;
+        };
+        let Some(objects) = doc.get("objects").and_then(|o| o.as_array()) else {
+            continue;
+        };
+        let oids: Vec<String> = objects
+            .iter()
+            .filter_map(|o| o.get("oid").and_then(|v| v.as_str()).map(str::to_string))
+            .collect();
+        let mtime = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        found.push((
+            mtime,
+            MetaIndexEntry {
+                id: id.to_string(),
+                oids,
+            },
+        ));
+    }
+    found.sort_by_key(|(mtime, _)| *mtime);
+    found.into_iter().map(|(_, e)| e).collect()
+}
+
 fn now_epoch() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1669,6 +1822,58 @@ mod tests {
         assert_eq!(stats.unique_chunks, 2);
         assert_eq!(stats.pack_count, 1, "batch aggregates into one pack");
         assert_eq!(store.verify().unwrap(), 2);
+    }
+
+    #[test]
+    fn meta_pack_export_writes_pack_and_self_healing_index() {
+        let dir = tempfile::tempdir().unwrap();
+        let tree = tempfile::tempdir().unwrap();
+        let mut store =
+            GlobalStore::open_with_layout(dir.path(), Some(StoreLayout::Packfiles)).unwrap();
+        let a = vec![1u8; 1000];
+        let b = vec![2u8; 1000];
+        let (ha, hb) = (hash_chunk(&a), hash_chunk(&b));
+        store.put_chunk(&ha, &a, 0, a.len() as u32).unwrap();
+        store.put_chunk(&hb, &b, 0, b.len() as u32).unwrap();
+        store.publish_asset(&rec("oid1", &[&ha])).unwrap();
+        store.publish_asset(&rec("oid2", &[&ha, &hb])).unwrap();
+
+        let id = store
+            .export_meta_pack(&["oid1".into(), "oid2".into()], tree.path())
+            .unwrap()
+            .expect("a pack id");
+        let pack_path = tree.path().join(format!("meta/packs/{id}.cmeta"));
+        assert!(pack_path.is_file());
+
+        // The pack carries both objects' manifests + chunk locations.
+        let raw = zstd::bulk::decompress(&std::fs::read(&pack_path).unwrap(), 1 << 30).unwrap();
+        let doc: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(doc["version"], 1);
+        assert_eq!(doc["objects"].as_array().unwrap().len(), 2);
+        assert_eq!(doc["objects"][1]["chunks"].as_array().unwrap().len(), 2);
+
+        // The index maps both oids to the pack.
+        let index: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(tree.path().join("meta/index.json")).unwrap())
+                .unwrap();
+        assert_eq!(index["packs"][0]["id"], id.as_str());
+        assert_eq!(index["packs"][0]["oids"].as_array().unwrap().len(), 2);
+
+        // A second session appends; a corrupted index self-heals from the
+        // packs on the next export.
+        store.publish_asset(&rec("oid3", &[&hb])).unwrap();
+        std::fs::write(tree.path().join("meta/index.json"), b"garbage").unwrap();
+        let id2 = store
+            .export_meta_pack(&["oid3".into()], tree.path())
+            .unwrap()
+            .unwrap();
+        let index: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(tree.path().join("meta/index.json")).unwrap())
+                .unwrap();
+        let packs = index["packs"].as_array().unwrap();
+        assert_eq!(packs.len(), 2, "rebuilt old pack + appended new one");
+        assert!(packs.iter().any(|p| p["id"] == id.as_str()));
+        assert!(packs.iter().any(|p| p["id"] == id2.as_str()));
     }
 
     #[test]
