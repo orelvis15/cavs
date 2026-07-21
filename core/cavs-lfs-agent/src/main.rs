@@ -41,7 +41,7 @@ struct Args {
     cache_dir: Option<std::path::PathBuf>,
 
     /// Chunking profile for uploads: fastcdc-16k/32k/64k/128k/256k[-n3],
-    /// fixed-256k/512k/1m, or auto (per-file by size: <64 MiB -> 16k,
+    /// fixed-256k/512k/1m, or auto (per-file by size: <128 MiB -> 16k,
     /// <512 MiB -> 64k, else 128k — tuned from bench/RESULTS.md).
     #[arg(long, default_value = "auto")]
     profile: String,

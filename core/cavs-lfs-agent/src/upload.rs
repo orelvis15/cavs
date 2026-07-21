@@ -39,7 +39,10 @@ pub struct UploadCfg {
 /// size crosses a tier loses dedup for that one transition.
 pub fn auto_profile(size: u64) -> &'static str {
     const MIB: u64 = 1024 * 1024;
-    if size < 64 * MIB {
+    if size < 128 * MIB {
+        // Strictly better on the 64 MiB compressible scenario (storage −20%,
+        // update download −71% vs 64k) and better download at 104 MiB too
+        // (−19%) for +3.5% storage — update efficiency is the product goal.
         "fastcdc-16k"
     } else if size < 512 * MIB {
         "fastcdc-64k"
@@ -255,9 +258,9 @@ mod tests {
         const MIB: u64 = 1024 * 1024;
         assert_eq!(auto_profile(0), "fastcdc-16k");
         assert_eq!(auto_profile(360 * 1024), "fastcdc-16k");
-        assert_eq!(auto_profile(63 * MIB), "fastcdc-16k");
-        assert_eq!(auto_profile(64 * MIB), "fastcdc-64k");
-        assert_eq!(auto_profile(104 * MIB), "fastcdc-64k");
+        assert_eq!(auto_profile(64 * MIB), "fastcdc-16k");
+        assert_eq!(auto_profile(127 * MIB), "fastcdc-16k");
+        assert_eq!(auto_profile(128 * MIB), "fastcdc-64k");
         assert_eq!(auto_profile(511 * MIB), "fastcdc-64k");
         assert_eq!(auto_profile(512 * MIB), "fastcdc-128k");
         assert_eq!(auto_profile(4096 * MIB), "fastcdc-128k");
