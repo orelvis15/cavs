@@ -6,9 +6,10 @@
 
 mod global;
 pub mod packfile;
+mod segindex;
 pub use global::{
-    AssetRecord, ChunkInfo, ChunkLocation, CoalesceStats, GlobalStore, Result, StoreError,
-    StoreLayout, StoreSegment, StoreStats, StoreTrack,
+    AssetRecord, ChunkInfo, ChunkLocation, CoalesceStats, GlobalStore, IndexReport, Result,
+    StoreError, StoreLayout, StoreSegment, StoreStats, StoreTrack,
 };
 
 use cavs_hash::ChunkHash;

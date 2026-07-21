@@ -29,6 +29,7 @@
 //! ledger records where each chunk lives, and reads follow the record.
 
 use crate::packfile::{self, PackWriter, PREFERRED_PACK_SIZE};
+use crate::segindex;
 use cavs_hash::{from_hex, to_hex, ChunkHash};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -166,6 +167,17 @@ struct Index {
     generation: u64,
 }
 
+/// Structure of the ledger, for `store index-inspect`.
+#[derive(Debug, Clone, Copy)]
+pub struct IndexReport {
+    pub segmented: bool,
+    pub generation: u64,
+    /// Total segments in the active generation (segmented mode only).
+    pub segments: usize,
+    /// Delta segments awaiting compaction (segmented mode only).
+    pub deltas: usize,
+}
+
 /// Summary for `store stat`.
 #[derive(Debug, Clone)]
 pub struct StoreStats {
@@ -185,9 +197,21 @@ pub struct StoreStats {
     pub pack_live_bytes: u64,
 }
 
+/// The store's chunk table when it runs on the segmented index (Round 3B):
+/// the mmapped generations plus an in-RAM overlay of records touched since
+/// the last commit (`None` = deletion). Reads consult the overlay first;
+/// [`GlobalStore::save_index`] turns the overlay into one delta segment.
+struct SegState {
+    index: segindex::SegIndex,
+    overlay: BTreeMap<String, Option<ChunkInfo>>,
+}
+
 pub struct GlobalStore {
     root: PathBuf,
     index: Index,
+    /// `Some` = segmented-index mode: `index.chunks` stays empty and chunk
+    /// lookups go through the mmapped segments + overlay instead of RAM.
+    seg: Option<SegState>,
     open_pack: Option<PackWriter>,
     preferred_pack_size: u64,
     /// `Some` while a publish batch is open (see
@@ -207,6 +231,42 @@ impl GlobalStore {
     pub fn open_with_layout(root: &Path, layout: Option<StoreLayout>) -> Result<Self> {
         std::fs::create_dir_all(root.join("chunks"))?;
         std::fs::create_dir_all(root.join("assets"))?;
+
+        // Segmented-index stores (Round 3B, opted in via
+        // [`Self::migrate_index_to_segmented`]) open by mmap: the chunk
+        // table never loads into RAM.
+        if segindex::SegIndex::exists(root) {
+            let (seg, assets) = segindex::SegIndex::open(root)?;
+            if let Some(requested) = layout {
+                if requested != seg.layout {
+                    return Err(StoreError::LayoutMismatch {
+                        store: seg.layout,
+                        requested,
+                    });
+                }
+            }
+            let index = Index {
+                chunks: BTreeMap::new(), // unused in segmented mode
+                assets,
+                layout: seg.layout,
+                generation: seg.generation,
+            };
+            Self::sweep_part_packs(root)?;
+            let store = Self {
+                root: root.to_path_buf(),
+                index,
+                seg: Some(SegState {
+                    index: seg,
+                    overlay: BTreeMap::new(),
+                }),
+                open_pack: None,
+                preferred_pack_size: PREFERRED_PACK_SIZE,
+                batch: None,
+            };
+            store.restore_quarantined_packs()?;
+            return Ok(store);
+        }
+
         let bin_path = root.join("index.bin");
         let prev_path = root.join("index.bin.prev");
         let json_path = root.join("index.json");
@@ -236,19 +296,11 @@ impl GlobalStore {
                 });
             }
         }
-        // A crash mid-ingest can leave a temp pack behind; it was never
-        // referenced by the ledger, so it is safe to drop.
-        let packs_dir = root.join("packs");
-        if packs_dir.is_dir() {
-            for entry in std::fs::read_dir(&packs_dir)?.flatten() {
-                if entry.path().extension().is_some_and(|e| e == "part") {
-                    let _ = std::fs::remove_file(entry.path());
-                }
-            }
-        }
+        Self::sweep_part_packs(root)?;
         let store = Self {
             root: root.to_path_buf(),
             index,
+            seg: None,
             open_pack: None,
             preferred_pack_size: PREFERRED_PACK_SIZE,
             batch: None,
@@ -257,6 +309,80 @@ impl GlobalStore {
         // a newer GC had already quarantined; bring them back.
         store.restore_quarantined_packs()?;
         Ok(store)
+    }
+
+    /// A crash mid-ingest can leave a temp pack behind; it was never
+    /// referenced by the ledger, so it is safe to drop.
+    fn sweep_part_packs(root: &Path) -> Result<()> {
+        let packs_dir = root.join("packs");
+        if packs_dir.is_dir() {
+            for entry in std::fs::read_dir(&packs_dir)?.flatten() {
+                if entry.path().extension().is_some_and(|e| e == "part") {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Migrate this store's ledger from the monolithic `index.bin` to the
+    /// segmented, mmapped index (Round 3B). One-way and explicit: the old
+    /// snapshot is kept as `index.bin.pre-migration` for a manual rollback
+    /// (delete `index/` and rename it back). Subsequent opens go straight
+    /// to the segmented path; publishes append delta segments instead of
+    /// rewriting the ledger. Returns the migrated chunk count.
+    pub fn migrate_index_to_segmented(&mut self) -> Result<u64> {
+        if self.seg.is_some() {
+            return Ok(self.chunks_len()); // already segmented
+        }
+        // Resolve every pending location so the migrated records are final.
+        self.flush_packs()?;
+        let migrated = self.index.chunks.len() as u64;
+        let (seg, _assets) = segindex::SegIndex::create(
+            &self.root,
+            self.index.generation + 1,
+            self.index.layout,
+            &self.index.chunks,
+            &self.index.assets,
+        )?;
+        self.index.generation = seg.generation;
+        self.seg = Some(SegState {
+            index: seg,
+            overlay: BTreeMap::new(),
+        });
+        self.index.chunks = BTreeMap::new();
+        // Keep one legacy snapshot for rollback; remove the rest so a
+        // pre-3B binary cannot silently open a stale ledger.
+        let bin = self.root.join("index.bin");
+        if bin.exists() {
+            let _ = std::fs::rename(&bin, self.root.join("index.bin.pre-migration"));
+        }
+        let _ = std::fs::remove_file(self.root.join("index.bin.prev"));
+        let _ = std::fs::remove_file(self.root.join("index.json"));
+        Ok(migrated)
+    }
+
+    /// Whether this store runs on the segmented (mmap) index.
+    pub fn is_segmented(&self) -> bool {
+        self.seg.is_some()
+    }
+
+    /// A small structural report of the ledger, for `store index-inspect`.
+    pub fn index_report(&self) -> IndexReport {
+        match &self.seg {
+            Some(seg) => IndexReport {
+                segmented: true,
+                generation: seg.index.generation,
+                segments: seg.index.segment_count(),
+                deltas: seg.index.delta_count(),
+            },
+            None => IndexReport {
+                segmented: false,
+                generation: self.index.generation,
+                segments: 0,
+                deltas: 0,
+            },
+        }
     }
 
     /// Load the ledger, preferring `index.bin` and falling back to the
@@ -352,12 +478,122 @@ impl GlobalStore {
         self.root.join("packs")
     }
 
-    pub fn has_chunk(&self, hash: &ChunkHash) -> bool {
-        self.index.chunks.contains_key(&to_hex(hash))
+    // ------------------------------------------------------------------
+    // Chunk-table accessors: the single seam between the store's logic and
+    // its ledger representation (in-RAM BTreeMap, or mmapped segments +
+    // overlay). Everything below this block goes through these.
+    // ------------------------------------------------------------------
+
+    fn chunk_get(&self, hex: &str) -> Option<ChunkInfo> {
+        match &self.seg {
+            Some(seg) => match seg.overlay.get(hex) {
+                Some(entry) => entry.clone(), // Some(None) = deleted
+                None => seg.index.lookup(hex),
+            },
+            None => self.index.chunks.get(hex).cloned(),
+        }
     }
 
-    pub fn chunk_info(&self, hash: &ChunkHash) -> Option<&ChunkInfo> {
-        self.index.chunks.get(&to_hex(hash))
+    fn chunk_contains(&self, hex: &str) -> bool {
+        match &self.seg {
+            Some(seg) => match seg.overlay.get(hex) {
+                Some(entry) => entry.is_some(),
+                None => seg.index.lookup(hex).is_some(),
+            },
+            None => self.index.chunks.contains_key(hex),
+        }
+    }
+
+    fn chunk_insert(&mut self, hex: String, info: ChunkInfo) {
+        match &mut self.seg {
+            Some(seg) => {
+                seg.overlay.insert(hex, Some(info));
+            }
+            None => {
+                self.index.chunks.insert(hex, info);
+            }
+        }
+    }
+
+    fn chunk_remove(&mut self, hex: &str) -> Option<ChunkInfo> {
+        match &mut self.seg {
+            Some(_) => {
+                let old = self.chunk_get(hex)?;
+                self.seg
+                    .as_mut()
+                    .unwrap()
+                    .overlay
+                    .insert(hex.to_string(), None); // tombstone
+                Some(old)
+            }
+            None => self.index.chunks.remove(hex),
+        }
+    }
+
+    /// Read-modify-write one entry; returns whether it existed.
+    fn chunk_update<F: FnOnce(&mut ChunkInfo)>(&mut self, hex: &str, f: F) -> bool {
+        match &mut self.seg {
+            Some(_) => {
+                let Some(mut info) = self.chunk_get(hex) else {
+                    return false;
+                };
+                f(&mut info);
+                self.seg
+                    .as_mut()
+                    .unwrap()
+                    .overlay
+                    .insert(hex.to_string(), Some(info));
+                true
+            }
+            None => match self.index.chunks.get_mut(hex) {
+                Some(info) => {
+                    f(info);
+                    true
+                }
+                None => false,
+            },
+        }
+    }
+
+    /// Every live ledger entry, sorted by hex. In segmented mode this
+    /// streams a k-way merge over the mmaps shadowed by the overlay —
+    /// nothing is materialized.
+    fn chunks_iter(&self) -> Box<dyn Iterator<Item = (String, ChunkInfo)> + '_> {
+        match &self.seg {
+            Some(seg) => Box::new(OverlayMerge {
+                base: seg.index.iter_live().peekable(),
+                overlay: seg.overlay.iter().peekable(),
+            }),
+            None => Box::new(
+                self.index
+                    .chunks
+                    .iter()
+                    .map(|(hex, info)| (hex.clone(), info.clone())),
+            ),
+        }
+    }
+
+    fn chunks_len(&self) -> u64 {
+        match &self.seg {
+            Some(_) => self.chunks_iter().count() as u64,
+            None => self.index.chunks.len() as u64,
+        }
+    }
+
+    /// The set of pack ids any live chunk references (GC / quarantine /
+    /// export all reason about liveness at pack granularity).
+    fn live_pack_set(&self) -> HashSet<String> {
+        self.chunks_iter()
+            .filter_map(|(_, info)| info.pack)
+            .collect()
+    }
+
+    pub fn has_chunk(&self, hash: &ChunkHash) -> bool {
+        self.chunk_contains(&to_hex(hash))
+    }
+
+    pub fn chunk_info(&self, hash: &ChunkHash) -> Option<ChunkInfo> {
+        self.chunk_get(&to_hex(hash))
     }
 
     /// Store a chunk in its stored form. No-op (returns false) if already
@@ -374,7 +610,7 @@ impl GlobalStore {
         len_raw: u32,
     ) -> Result<bool> {
         let hex = to_hex(hash);
-        if self.index.chunks.contains_key(&hex) {
+        if self.chunk_contains(&hex) {
             return Ok(false);
         }
         let entry = ChunkInfo {
@@ -393,7 +629,7 @@ impl GlobalStore {
                 let tmp = path.with_extension("tmp");
                 std::fs::write(&tmp, stored)?;
                 std::fs::rename(&tmp, &path)?;
-                self.index.chunks.insert(hex, entry);
+                self.chunk_insert(hex, entry);
             }
             StoreLayout::Packfiles => {
                 if self.open_pack.is_none() {
@@ -404,7 +640,7 @@ impl GlobalStore {
                 let full = writer.data_len() >= self.preferred_pack_size;
                 // Ledger entry first (location unresolved), so the flush
                 // below — and any later one — fills in pack/offset.
-                self.index.chunks.insert(hex, entry);
+                self.chunk_insert(hex, entry);
                 if full {
                     self.flush_packs()?;
                 }
@@ -426,28 +662,26 @@ impl GlobalStore {
         let (pack_hex, entries) = writer.finish()?;
         for entry in entries {
             let hex = to_hex(&entry.hash);
-            match self.index.chunks.get_mut(&hex) {
-                Some(info) => {
-                    info.pack = Some(pack_hex.clone());
-                    info.pack_offset = Some(entry.offset);
-                }
-                // put_chunk always inserts the entry before flushing, so
-                // this arm is defensive (e.g. a future caller flushing a
-                // writer it fed directly).
-                None => {
-                    self.index.chunks.insert(
-                        hex,
-                        ChunkInfo {
-                            len_raw: entry.raw_len,
-                            len_stored: entry.stored_len,
-                            flags: entry.flags,
-                            refcount: 0,
-                            zero_since: Some(0),
-                            pack: Some(pack_hex.clone()),
-                            pack_offset: Some(entry.offset),
-                        },
-                    );
-                }
+            let resolved = self.chunk_update(&hex, |info| {
+                info.pack = Some(pack_hex.clone());
+                info.pack_offset = Some(entry.offset);
+            });
+            // put_chunk always inserts the entry before flushing, so this
+            // arm is defensive (e.g. a future caller flushing a writer it
+            // fed directly).
+            if !resolved {
+                self.chunk_insert(
+                    hex,
+                    ChunkInfo {
+                        len_raw: entry.raw_len,
+                        len_stored: entry.stored_len,
+                        flags: entry.flags,
+                        refcount: 0,
+                        zero_since: Some(0),
+                        pack: Some(pack_hex.clone()),
+                        pack_offset: Some(entry.offset),
+                    },
+                );
             }
         }
         Ok(())
@@ -457,9 +691,7 @@ impl GlobalStore {
     pub fn read_chunk_stored(&self, hash: &ChunkHash) -> Result<(Vec<u8>, u32, u32)> {
         let hex = to_hex(hash);
         let info = self
-            .index
-            .chunks
-            .get(&hex)
+            .chunk_get(&hex)
             .ok_or_else(|| StoreError::MissingChunk(hex.clone()))?;
         let bytes = match (&info.pack, info.pack_offset) {
             (Some(pack), Some(offset)) => packfile::read_pack_range(
@@ -476,7 +708,7 @@ impl GlobalStore {
     /// Where a chunk physically lives, when it lives in a pack (manifest
     /// location hints).
     pub fn chunk_location(&self, hash: &ChunkHash) -> Option<ChunkLocation> {
-        let info = self.index.chunks.get(&to_hex(hash))?;
+        let info = self.chunk_get(&to_hex(hash))?;
         Some(ChunkLocation {
             pack_hex: info.pack.clone()?,
             offset: info.pack_offset?,
@@ -503,18 +735,16 @@ impl GlobalStore {
         let mut out: Vec<Option<(Vec<u8>, u32, u32)>> = vec![None; hashes.len()];
         let mut stats = CoalesceStats::default();
         // pack hex -> (input position, offset, stored_len, flags, len_raw)
-        let mut by_pack: HashMap<&str, Vec<(usize, u64, u32, u32, u32)>> = HashMap::new();
+        let mut by_pack: HashMap<String, Vec<(usize, u64, u32, u32, u32)>> = HashMap::new();
 
         for (pos, hash) in hashes.iter().enumerate() {
             let hex = to_hex(hash);
             let info = self
-                .index
-                .chunks
-                .get(&hex)
+                .chunk_get(&hex)
                 .ok_or_else(|| StoreError::MissingChunk(hex.clone()))?;
             match (&info.pack, info.pack_offset) {
                 (Some(pack), Some(offset)) => {
-                    by_pack.entry(pack.as_str()).or_default().push((
+                    by_pack.entry(pack.clone()).or_default().push((
                         pos,
                         offset,
                         info.len_stored,
@@ -531,7 +761,7 @@ impl GlobalStore {
         }
 
         for (pack, mut chunks) in by_pack {
-            let pack_file = packfile::pack_path(&self.packs_dir(), pack);
+            let pack_file = packfile::pack_path(&self.packs_dir(), &pack);
             chunks.sort_by_key(|&(_, offset, ..)| offset);
             stats.pack_chunks_requested += chunks.len() as u64;
 
@@ -595,7 +825,7 @@ impl GlobalStore {
         }
         // Validate every referenced chunk exists.
         for hex in &distinct {
-            if !self.index.chunks.contains_key(hex) {
+            if !self.chunk_contains(hex) {
                 return Err(StoreError::MissingChunk(hex.clone()));
             }
         }
@@ -604,10 +834,10 @@ impl GlobalStore {
             self.decrement(&old);
         }
         for hex in &distinct {
-            if let Some(info) = self.index.chunks.get_mut(hex) {
+            self.chunk_update(hex, |info| {
                 info.refcount += 1;
                 info.zero_since = None;
-            }
+            });
         }
         self.index
             .assets
@@ -648,14 +878,14 @@ impl GlobalStore {
 
     fn decrement(&mut self, chunks: &[String]) {
         for hex in chunks {
-            if let Some(info) = self.index.chunks.get_mut(hex) {
+            self.chunk_update(hex, |info| {
                 info.refcount = info.refcount.saturating_sub(1);
                 if info.refcount == 0 {
                     // Stamped 0 as a sentinel; real epoch set by caller-aware
                     // paths is unnecessary — gc uses now vs zero_since.
                     info.zero_since = Some(now_epoch());
                 }
-            }
+            });
         }
     }
 
@@ -670,17 +900,15 @@ impl GlobalStore {
     pub fn gc(&mut self, grace_secs: u64) -> Result<(u64, u64)> {
         let now = now_epoch();
         let doomed: Vec<String> = self
-            .index
-            .chunks
-            .iter()
+            .chunks_iter()
             .filter(|(_, i)| i.refcount == 0)
             .filter(|(_, i)| now.saturating_sub(i.zero_since.unwrap_or(0)) >= grace_secs)
-            .map(|(h, _)| h.clone())
+            .map(|(h, _)| h)
             .collect();
         let mut bytes = 0u64;
         let mut touched_packs: HashSet<String> = HashSet::new();
         for hex in &doomed {
-            if let Some(info) = self.index.chunks.remove(hex) {
+            if let Some(info) = self.chunk_remove(hex) {
                 match info.pack {
                     Some(pack) => {
                         touched_packs.insert(pack);
@@ -695,12 +923,7 @@ impl GlobalStore {
         // Quarantine packs that no remaining chunk references (deleted only
         // after they also age out of quarantine, below).
         if !touched_packs.is_empty() {
-            let live: HashSet<&str> = self
-                .index
-                .chunks
-                .values()
-                .filter_map(|i| i.pack.as_deref())
-                .collect();
+            let live = self.live_pack_set();
             for pack in &touched_packs {
                 if !live.contains(pack.as_str()) {
                     self.quarantine_pack(pack)?;
@@ -748,12 +971,7 @@ impl GlobalStore {
         if !qdir.is_dir() {
             return Ok(0);
         }
-        let live: HashSet<&str> = self
-            .index
-            .chunks
-            .values()
-            .filter_map(|i| i.pack.as_deref())
-            .collect();
+        let live = self.live_pack_set();
         let now = now_epoch();
         let mut bytes = 0u64;
         for entry in std::fs::read_dir(&qdir)?.flatten() {
@@ -818,12 +1036,7 @@ impl GlobalStore {
         if !qdir.is_dir() {
             return Ok(());
         }
-        let live: HashSet<String> = self
-            .index
-            .chunks
-            .values()
-            .filter_map(|i| i.pack.clone())
-            .collect();
+        let live = self.live_pack_set();
         for entry in std::fs::read_dir(&qdir)?.flatten() {
             let path = entry.path();
             if path.extension().is_none_or(|e| e != "cavspack") {
@@ -851,12 +1064,7 @@ impl GlobalStore {
         if !packs_dir.is_dir() {
             return Ok(());
         }
-        let live: HashSet<&str> = self
-            .index
-            .chunks
-            .values()
-            .filter_map(|i| i.pack.as_deref())
-            .collect();
+        let live = self.live_pack_set();
         let now = std::time::SystemTime::now();
         for shard in std::fs::read_dir(&packs_dir)?.flatten() {
             if !shard.path().is_dir() {
@@ -898,35 +1106,33 @@ impl GlobalStore {
     }
 
     pub fn stats(&self) -> StoreStats {
-        let unique_chunks = self.index.chunks.len() as u64;
-        let stored_bytes: u64 = self
-            .index
-            .chunks
-            .values()
-            .map(|i| i.len_stored as u64)
-            .sum();
-        let unique_raw_bytes: u64 = self.index.chunks.values().map(|i| i.len_raw as u64).sum();
-        let zero_ref_chunks = self
-            .index
-            .chunks
-            .values()
-            .filter(|i| i.refcount == 0)
-            .count() as u64;
+        // One streaming pass over the ledger (in segmented mode this walks
+        // the mmaps without materializing the table).
+        let mut unique_chunks = 0u64;
+        let mut stored_bytes = 0u64;
+        let mut unique_raw_bytes = 0u64;
+        let mut zero_ref_chunks = 0u64;
+        let mut pack_ids: HashSet<String> = HashSet::new();
+        let mut pack_live_bytes = 0u64;
+        for (_, info) in self.chunks_iter() {
+            unique_chunks += 1;
+            stored_bytes += info.len_stored as u64;
+            unique_raw_bytes += info.len_raw as u64;
+            if info.refcount == 0 {
+                zero_ref_chunks += 1;
+            }
+            if let Some(pack) = info.pack {
+                pack_ids.insert(pack);
+                pack_live_bytes += info.len_stored as u64;
+            }
+        }
         // Logical = if every asset stored its own copy of every chunk.
         let mut logical = 0u64;
         for chunks in self.index.assets.values() {
             for hex in chunks {
-                if let Some(i) = self.index.chunks.get(hex) {
+                if let Some(i) = self.chunk_get(hex) {
                     logical += i.len_stored as u64;
                 }
-            }
-        }
-        let mut pack_ids: HashSet<&str> = HashSet::new();
-        let mut pack_live_bytes = 0u64;
-        for info in self.index.chunks.values() {
-            if let Some(pack) = info.pack.as_deref() {
-                pack_ids.insert(pack);
-                pack_live_bytes += info.len_stored as u64;
             }
         }
         let pack_disk_bytes: u64 = pack_ids
@@ -956,7 +1162,10 @@ impl GlobalStore {
         // Cap decompression by the ledger's own raw length, itself sane-
         // bounded so a corrupt ledger cannot request a huge allocation.
         const MAX_RAW: u64 = 256 * 1024 * 1024;
-        for hex in self.index.chunks.keys() {
+        let mut checked = 0u64;
+        for (hex, _) in self.chunks_iter() {
+            let hex = &hex;
+            checked += 1;
             let hash = from_hex(hex).ok_or_else(|| StoreError::BadHash(hex.clone()))?;
             let (stored, flags, len_raw) = self.read_chunk_stored(&hash)?;
             let mut raw = if flags & 1 != 0 {
@@ -979,16 +1188,14 @@ impl GlobalStore {
                 return Err(StoreError::BadHash(hex.clone()));
             }
         }
-        let packs: HashSet<&str> = self
-            .index
-            .chunks
-            .values()
-            .filter_map(|i| i.pack.as_deref())
-            .collect();
-        for pack in packs {
-            packfile::verify_pack(&packfile::pack_path(&self.packs_dir(), pack))?;
+        for pack in self.live_pack_set() {
+            packfile::verify_pack(&packfile::pack_path(&self.packs_dir(), &pack))?;
         }
-        Ok(self.index.chunks.len() as u64)
+        // Segmented mode: the index's own per-segment seals too.
+        if let Some(seg) = &self.seg {
+            seg.index.verify_segments()?;
+        }
+        Ok(checked)
     }
 
     /// Export the store as a deterministic, immutable object tree ready to
@@ -1009,28 +1216,22 @@ impl GlobalStore {
                 "object-store export requires a packfile-layout store".into(),
             ));
         }
-        if let Some((hex, _)) = self.index.chunks.iter().find(|(_, i)| i.pack.is_none()) {
+        if let Some((hex, _)) = self.chunks_iter().find(|(_, i)| i.pack.is_none()) {
             return Err(StoreError::NotExportable(format!(
                 "chunk {hex} is not packed (ingest still open?)"
             )));
         }
-        let packs: HashSet<&str> = self
-            .index
-            .chunks
-            .values()
-            .filter_map(|i| i.pack.as_deref())
-            .collect();
         let mut written = Vec::new();
-        let mut packs: Vec<&str> = packs.into_iter().collect();
+        let mut packs: Vec<String> = self.live_pack_set().into_iter().collect();
         packs.sort_unstable();
         for pack in packs {
             for (src, rel) in [
                 (
-                    packfile::pack_path(&self.packs_dir(), pack),
+                    packfile::pack_path(&self.packs_dir(), &pack),
                     format!("chunks/packs/{}/{pack}.cavspack", &pack[..2]),
                 ),
                 (
-                    packfile::index_path(&self.packs_dir(), pack),
+                    packfile::index_path(&self.packs_dir(), &pack),
                     format!("chunks/indexes/{}/{pack}.cavsindex", &pack[..2]),
                 ),
             ] {
@@ -1077,7 +1278,7 @@ impl GlobalStore {
             .ok_or_else(|| StoreError::AssetNotFound(name.to_string()))?;
         let mut chunks = Vec::with_capacity(hexes.len());
         for hex in hexes {
-            let Some(info) = self.index.chunks.get(hex) else {
+            let Some(info) = self.chunk_get(hex) else {
                 continue;
             };
             let Some(pack) = info.pack.as_deref() else {
@@ -1138,12 +1339,12 @@ impl GlobalStore {
             .assets
             .get(name)
             .ok_or_else(|| StoreError::AssetNotFound(name.to_string()))?;
-        let mut packs: Vec<&str> = Vec::new();
+        let mut packs: Vec<String> = Vec::new();
         for hex in hexes {
-            let Some(info) = self.index.chunks.get(hex) else {
+            let Some(info) = self.chunk_get(hex) else {
                 continue;
             };
-            match info.pack.as_deref() {
+            match info.pack {
                 Some(pack) => {
                     if !packs.contains(&pack) {
                         packs.push(pack);
@@ -1162,11 +1363,11 @@ impl GlobalStore {
         for pack in packs {
             for (src, rel) in [
                 (
-                    packfile::pack_path(&self.packs_dir(), pack),
+                    packfile::pack_path(&self.packs_dir(), &pack),
                     format!("chunks/packs/{}/{pack}.cavspack", &pack[..2]),
                 ),
                 (
-                    packfile::index_path(&self.packs_dir(), pack),
+                    packfile::index_path(&self.packs_dir(), &pack),
                     format!("chunks/indexes/{}/{pack}.cavsindex", &pack[..2]),
                 ),
             ] {
@@ -1345,6 +1546,14 @@ impl GlobalStore {
     /// anywhere in this sequence loses at most the in-memory batch, never
     /// the store.
     fn save_index(&mut self) -> Result<()> {
+        // Segmented mode: the overlay becomes one delta segment and a new
+        // generation — the ledger is never rewritten whole.
+        if let Some(seg) = &mut self.seg {
+            let overlay = std::mem::take(&mut seg.overlay);
+            seg.index.commit_generation(&overlay, &self.index.assets)?;
+            self.index.generation = seg.index.generation;
+            return Ok(());
+        }
         self.index.generation += 1;
         let path = self.root.join("index.bin");
         let prev = self.root.join("index.bin.prev");
@@ -1663,6 +1872,48 @@ fn copy_if_different(src: &Path, dst: &Path) -> Result<bool> {
     Ok(!same)
 }
 
+/// Sorted merge of the segmented index's live view with the store's
+/// uncommitted overlay: overlay entries shadow the base (and `None`
+/// entries delete), preserving hex order so callers see one coherent,
+/// sorted ledger stream.
+struct OverlayMerge<'a, B: Iterator<Item = (String, ChunkInfo)>> {
+    base: std::iter::Peekable<B>,
+    overlay: std::iter::Peekable<std::collections::btree_map::Iter<'a, String, Option<ChunkInfo>>>,
+}
+
+impl<B: Iterator<Item = (String, ChunkInfo)>> Iterator for OverlayMerge<'_, B> {
+    type Item = (String, ChunkInfo);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let which = match (self.base.peek(), self.overlay.peek()) {
+                (None, None) => return None,
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (Some((bh, _)), Some((oh, _))) => bh.as_str().cmp(oh.as_str()),
+            };
+            match which {
+                std::cmp::Ordering::Less => return self.base.next(),
+                std::cmp::Ordering::Greater => {
+                    let (hex, entry) = self.overlay.next().unwrap();
+                    if let Some(info) = entry {
+                        return Some((hex.clone(), info.clone()));
+                    }
+                    // Overlay-only tombstone (entry deleted twice): skip.
+                }
+                std::cmp::Ordering::Equal => {
+                    self.base.next(); // shadowed
+                    let (hex, entry) = self.overlay.next().unwrap();
+                    if let Some(info) = entry {
+                        return Some((hex.clone(), info.clone()));
+                    }
+                    // Tombstone: the base entry is deleted; keep merging.
+                }
+            }
+        }
+    }
+}
+
 /// One `meta/index.json` entry: a session meta-pack and the oids it holds.
 struct MetaIndexEntry {
     id: String,
@@ -1822,6 +2073,148 @@ mod tests {
         assert_eq!(stats.unique_chunks, 2);
         assert_eq!(stats.pack_count, 1, "batch aggregates into one pack");
         assert_eq!(store.verify().unwrap(), 2);
+    }
+
+    #[test]
+    fn segmented_store_full_lifecycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = vec![1u8; 1500];
+        let b = vec![2u8; 1500];
+        let c = vec![3u8; 1500];
+        let (ha, hb, hc) = (hash_chunk(&a), hash_chunk(&b), hash_chunk(&c));
+
+        // Populate a legacy store, then migrate.
+        {
+            let mut store =
+                GlobalStore::open_with_layout(dir.path(), Some(StoreLayout::Packfiles)).unwrap();
+            store.put_chunk(&ha, &a, 0, a.len() as u32).unwrap();
+            store.put_chunk(&hb, &b, 0, b.len() as u32).unwrap();
+            store.publish_asset(&rec("v1", &[&ha, &hb])).unwrap();
+            assert_eq!(store.migrate_index_to_segmented().unwrap(), 2);
+            assert!(store.is_segmented());
+            assert!(!dir.path().join("index.bin").exists());
+            assert!(dir.path().join("index.bin.pre-migration").exists());
+            // Reads work through the mmapped segments.
+            assert_eq!(store.chunk_info(&ha).unwrap().refcount, 1);
+            assert_eq!(store.verify().unwrap(), 2);
+        }
+
+        // Reopen (goes straight to the segmented path) and keep working:
+        // publish a new asset with a new chunk, replace, GC.
+        {
+            let mut store = GlobalStore::open(dir.path()).unwrap();
+            assert!(store.is_segmented());
+            assert!(store.has_asset("v1"));
+            store.put_chunk(&hc, &c, 0, c.len() as u32).unwrap();
+            store.publish_asset(&rec("v2", &[&hb, &hc])).unwrap();
+            assert_eq!(store.chunk_info(&hb).unwrap().refcount, 2);
+
+            // Replace v1 by v2-only content: ha drops to zero.
+            store.unpublish_asset("v1").unwrap();
+            assert_eq!(store.chunk_info(&ha).unwrap().refcount, 0);
+            let (removed, _) = store.gc(0).unwrap();
+            assert_eq!(removed, 1);
+            assert!(store.chunk_info(&ha).is_none(), "gc'd through tombstone");
+        }
+
+        // Final reopen: the tombstone survived the generation swap.
+        let store = GlobalStore::open(dir.path()).unwrap();
+        assert!(store.chunk_info(&ha).is_none());
+        assert_eq!(store.chunk_info(&hc).unwrap().refcount, 1);
+        assert_eq!(store.stats().unique_chunks, 2);
+        assert_eq!(store.verify().unwrap(), 2);
+    }
+
+    #[test]
+    fn segmented_store_batch_publish_and_export() {
+        let dir = tempfile::tempdir().unwrap();
+        let tree = tempfile::tempdir().unwrap();
+        let mut store =
+            GlobalStore::open_with_layout(dir.path(), Some(StoreLayout::Packfiles)).unwrap();
+        store.migrate_index_to_segmented().unwrap();
+
+        let a = vec![7u8; 4000];
+        let b = vec![8u8; 4000];
+        let (ha, hb) = (hash_chunk(&a), hash_chunk(&b));
+        store.begin_publish_batch();
+        store.put_chunk(&ha, &a, 0, a.len() as u32).unwrap();
+        store.publish_asset(&rec("o1", &[&ha])).unwrap();
+        store.put_chunk(&hb, &b, 0, b.len() as u32).unwrap();
+        store.publish_asset(&rec("o2", &[&ha, &hb])).unwrap();
+        store.commit_publish_batch().unwrap();
+
+        store.export_asset("o1", tree.path()).unwrap();
+        store.export_asset("o2", tree.path()).unwrap();
+        store
+            .export_meta_pack(&["o1".into(), "o2".into()], tree.path())
+            .unwrap()
+            .unwrap();
+        assert!(tree.path().join("assets/o1/manifest.json").is_file());
+        assert!(tree.path().join("assets/o2/chunk-map.json").is_file());
+        assert!(tree.path().join("meta/index.json").is_file());
+
+        // Reopen: everything persisted via delta segments.
+        let store = GlobalStore::open(dir.path()).unwrap();
+        assert_eq!(store.stats().assets, 2);
+        assert_eq!(store.chunk_info(&ha).unwrap().refcount, 2);
+    }
+
+    /// Scale probe (ignored in CI): 1M chunks through migration, lookups
+    /// and a delta commit. Run with
+    /// `cargo test -p cavs-store --release -- --ignored index_scale_segmented`.
+    #[test]
+    #[ignore]
+    fn index_scale_segmented_1m_chunks() {
+        let dir = tempfile::tempdir().unwrap();
+        let n: usize = 1_000_000;
+        let mut chunks: BTreeMap<String, ChunkInfo> = BTreeMap::new();
+        for i in 0..n {
+            let h = to_hex(&hash_chunk(&(i as u64).to_le_bytes()));
+            chunks.insert(
+                h,
+                ChunkInfo {
+                    len_raw: 16 * 1024,
+                    len_stored: 8 * 1024,
+                    flags: 1,
+                    refcount: 1,
+                    zero_since: None,
+                    pack: Some(format!("{:064x}", i / 4096)),
+                    pack_offset: Some(((i % 4096) * 8192) as u64),
+                },
+            );
+        }
+        let assets = BTreeMap::from([(
+            "big".to_string(),
+            chunks.keys().take(1000).cloned().collect::<Vec<_>>(),
+        )]);
+        let t = std::time::Instant::now();
+        let (seg, _) = crate::segindex::SegIndex::create(
+            dir.path(),
+            1,
+            StoreLayout::Packfiles,
+            &chunks,
+            &assets,
+        )
+        .unwrap();
+        eprintln!("create 1M: {:?}", t.elapsed());
+        drop(seg);
+
+        let t = std::time::Instant::now();
+        let (seg, _) = crate::segindex::SegIndex::open(dir.path()).unwrap();
+        let open_elapsed = t.elapsed();
+        eprintln!("open 1M: {open_elapsed:?}");
+        assert!(open_elapsed.as_millis() < 1000, "open must be sub-second");
+
+        let keys: Vec<&String> = chunks.keys().step_by(997).collect();
+        let t = std::time::Instant::now();
+        for k in &keys {
+            assert!(seg.lookup(k).is_some());
+        }
+        eprintln!(
+            "lookup p50 over {} probes: {:?}/probe",
+            keys.len(),
+            t.elapsed() / keys.len() as u32
+        );
     }
 
     #[test]

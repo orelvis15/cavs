@@ -537,6 +537,7 @@ version = "1.6.0"
 dependencies = [
  "cavs-hash",
  "cavs-proto",
+ "memmap2",
  "serde",
  "serde_json",
  "tempfile",

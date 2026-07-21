@@ -125,6 +125,44 @@ pub fn export(store_dir: &Path, out: &Path, static_plans: bool) -> Result<()> {
     Ok(())
 }
 
+/// Migrate the ledger to the segmented, mmapped index (Round 3B).
+pub fn index_migrate(store_dir: &Path) -> Result<()> {
+    let mut store = GlobalStore::open(store_dir)?;
+    if store.is_segmented() {
+        println!("index   : already segmented (nothing to do)");
+        return Ok(());
+    }
+    let migrated = store.migrate_index_to_segmented()?;
+    let report = store.index_report();
+    println!(
+        "migrated: {migrated} chunks -> segmented index (generation {}, {} segments)",
+        report.generation, report.segments
+    );
+    println!("rollback: delete index/ and rename index.bin.pre-migration back");
+    Ok(())
+}
+
+/// Report the ledger's index mode and structure.
+pub fn index_inspect(store_dir: &Path) -> Result<()> {
+    let store = GlobalStore::open(store_dir)?;
+    let r = store.index_report();
+    if r.segmented {
+        println!(
+            "index   : segmented · generation {} · {} segments ({} deltas pending compaction)",
+            r.generation,
+            r.segments,
+            r.deltas
+        );
+    } else {
+        println!(
+            "index   : monolithic index.bin · generation {} (run `store index-migrate` to segment)",
+            r.generation
+        );
+    }
+    print_stats(&store);
+    Ok(())
+}
+
 fn print_stats(store: &GlobalStore) {
     let s = store.stats();
     // stored_bytes can briefly exceed the logical (referenced) total when
