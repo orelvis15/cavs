@@ -8,6 +8,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Coalesced range fetch** (cavs-fetch + serverless client): missing
+  chunks of the same pack are sorted and fetched in Range GETs of up to
+  8 MiB (gaps ≤ 64 KiB ride along); each chunk is still BLAKE3-verified
+  individually. Cold clone over HTTP: 6,179 → 46 requests on a 104 MiB
+  asset (−99.3%), −85% on 250 small files (`bench/results/perf-round2-v1`).
+- **Binary store ledger** (`index.bin`, CAVSIDX1): compact fixed-record
+  snapshot with a BLAKE3 seal replaces pretty-JSON `index.json` — −77%
+  size and −48% load time at 1M chunks; legacy stores are read and
+  migrated on the next save.
+- **Orphan-pack GC**: `gc()` also sweeps sealed packs no ledger entry
+  references (residue of a push killed between pack rollover and commit),
+  honoring the grace period against pack mtime.
+- `bench/http-bench.sh` + `bench/range_server.py`: HTTP cold-clone
+  benchmark (requests + wall time) for A/B-ing agent binaries.
+
 - **BG4 chunk codec** (`CHUNK_FLAG_BG4`, Xet-inspired): per-chunk choice of
   plain zstd vs a byte-grouping-of-4 pretransform + zstd, attempted only
   when plain zstd underperforms — a large win on float/int payloads (model
