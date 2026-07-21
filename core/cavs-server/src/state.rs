@@ -170,6 +170,8 @@ pub struct Metrics {
     pub pack_ranges_read_total: AtomicU64,
     pub pack_bytes_read_total: AtomicU64,
     pub pack_bytes_served_total: AtomicU64,
+    pub metadata_batch_requests_total: AtomicU64,
+    pub metadata_batch_objects_total: AtomicU64,
 }
 
 impl Metrics {
@@ -708,6 +710,47 @@ impl AppState {
         self.assets.get(asset_name)?.locations.as_ref()
     }
 
+    /// Round 3A metadata batch: resolve many objects' manifests (+ location
+    /// hints, when the asset comes from a packfile store) in one request,
+    /// so an LFS/many-files client pays one round-trip per *batch* instead
+    /// of one per object. Objects that don't exist come back with
+    /// `status: "missing"` — a partial response, never a whole-batch error.
+    pub fn metadata_batch(&self, oids: &[String]) -> serde_json::Value {
+        self.metrics
+            .metadata_batch_requests_total
+            .fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .metadata_batch_objects_total
+            .fetch_add(oids.len() as u64, Ordering::Relaxed);
+        let objects: Vec<serde_json::Value> = oids
+            .iter()
+            .map(|oid| match self.manifest(oid) {
+                Some(manifest) => {
+                    let locations = self.manifest_locations(oid).map(|locs| {
+                        locs.iter()
+                            .map(|(hash, l)| {
+                                serde_json::json!({
+                                    "hash": hash,
+                                    "pack": to_hex_slice(&l.pack_id),
+                                    "offset": l.offset,
+                                    "stored_len": l.stored_len,
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    });
+                    serde_json::json!({
+                        "oid": oid,
+                        "status": "available",
+                        "manifest": manifest,
+                        "locations": locations,
+                    })
+                }
+                None => serde_json::json!({ "oid": oid, "status": "missing" }),
+            })
+            .collect();
+        serde_json::json!({ "version": 1, "objects": objects })
+    }
+
     /// Count one manifest response in the per-format metrics.
     pub fn count_manifest_request(&self, format: &str, bytes: u64) {
         let (requests, total_bytes) = if format == "binary-v2" {
@@ -869,6 +912,14 @@ impl AppState {
             ("cavs_pack_ranges_read_total", &m.pack_ranges_read_total),
             ("cavs_pack_bytes_read_total", &m.pack_bytes_read_total),
             ("cavs_pack_bytes_served_total", &m.pack_bytes_served_total),
+            (
+                "cavs_metadata_batch_requests_total",
+                &m.metadata_batch_requests_total,
+            ),
+            (
+                "cavs_metadata_batch_objects_total",
+                &m.metadata_batch_objects_total,
+            ),
         ];
         let mut out = String::new();
         for (name, counter) in counters {
