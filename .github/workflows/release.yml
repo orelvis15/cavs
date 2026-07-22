@@ -68,6 +68,14 @@ jobs:
           else
             tar czf "$DIST.tar.gz" "$DIST"
           fi
+          # Also publish the LFS agent as a standalone binary named
+          # cavs-lfs-agent-<target>, so the CAVS Hub CLI installer
+          # (cavs-hub-cli/install.sh) can fetch it directly from Releases.
+          if [ -f "$BINDIR/cavs-lfs-agent.exe" ]; then
+            cp "$BINDIR/cavs-lfs-agent.exe" "cavs-lfs-agent-${{ matrix.target }}.exe"
+          else
+            cp "$BINDIR/cavs-lfs-agent" "cavs-lfs-agent-${{ matrix.target }}"
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -76,6 +84,7 @@ jobs:
           path: |
             *.tar.gz
             *.zip
+            cavs-lfs-agent-${{ matrix.target }}*
 
   sdk-native:
     name: sdk native ${{ matrix.target }}
